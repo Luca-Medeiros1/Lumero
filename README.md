@@ -1,5 +1,7 @@
 # Lumero
 
+FEITO COM AJUDA DE IA
+
 Assistente de IA local que roda no terminal. O modelo de IA fica no seu computador
 (Ollama em 127.0.0.1); só a pesquisa na internet sai dele, e dá para desligar.
 
