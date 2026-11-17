@@ -1,0 +1,103 @@
+# Gera os instaladores nativos do Lumero:
+#   Linux:   .deb (Ubuntu/Debian/Mint), .rpm (Fedora/openSUSE), .pkg.tar.zst (Arch/Manjaro)
+#   Windows: Lumero-VERSAO-Windows-Setup.exe (Inno Setup)
+#   macOS:   Lumero-VERSAO-macOS.dmg
+#
+# Roda sozinho quando você cria uma tag (ex: git tag v1.0.0 && git push --tags) e publica
+# tudo numa Release. Também dá para rodar à mão na aba Actions ("Run workflow").
+name: Pacotes do Lumero
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versão
+        run: echo "VERSAO=$(sed -n 's/^VERSAO = "\(.*\)".*/\1/p' lumero.py | head -1)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bibliotecas Python que vão dentro do pacote (só as de Python puro)
+        run: pip install --target empacotar/linux/vendor prompt_toolkit wcwidth
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: nFPM
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+      - name: Gerar .deb, .rpm e pacote do Arch
+        run: |
+          mkdir -p pacotes
+          for p in deb rpm archlinux; do
+            "$(go env GOPATH)/bin/nfpm" pkg --config empacotar/nfpm.yaml --packager "$p" --target pacotes/
+          done
+          ls -la pacotes
+      - name: Testar o .deb
+        run: |
+          sudo apt-get install -y ./pacotes/*.deb
+          lumero --versao
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumero-linux
+          path: pacotes/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Gerar o Setup.exe
+        shell: pwsh
+        run: |
+          $versao = (Select-String -Path lumero.py -Pattern '^VERSAO = "([^"]+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DVersao=$versao" empacotar\windows\lumero.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem pacotes
+      - name: Conferir os scripts do PowerShell
+        shell: powershell
+        run: |
+          foreach ($f in Get-ChildItem windows\*.ps1) {
+            $erros = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$erros) | Out-Null
+            if ($erros) { $erros | Format-List; exit 1 }
+            Write-Host "$($f.Name): ok"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumero-windows
+          path: pacotes/*
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar o .dmg
+        run: |
+          bash -n mac/instalar.sh
+          /bin/bash -n mac/instalar.sh   # o bash 3.2 do macOS
+          bash empacotar/mac/criar-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumero-macos
+          path: pacotes/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: pacotes
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: pacotes/*

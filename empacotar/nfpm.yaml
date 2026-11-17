@@ -1,0 +1,48 @@
+# Pacotes .deb (Ubuntu/Debian/Mint), .rpm (Fedora/openSUSE) e .pkg.tar.zst (Arch)
+# Gerados pelo GitHub Actions com o nFPM:  VERSAO=1.0.0 nfpm pkg -f empacotar/nfpm.yaml -p deb
+name: lumero
+arch: all
+platform: linux
+version: ${VERSAO}
+release: 1
+section: utils
+priority: optional
+maintainer: "Luca"
+description: |
+  Lumero: assistente de IA local com Ollama.
+  Conversa no terminal, pesquisa na internet, acha e abre arquivos, roda comandos
+  numa sandbox (com a sua permissão) e muito mais. A IA roda no seu computador.
+
+overrides:
+  deb:
+    depends: [python3, bubblewrap]
+    recommends: [pkexec, curl, zstd, wl-clipboard, xclip, poppler-utils, ffmpeg, 7zip, git,
+                 python3-psutil, python3-pil, python3-gi, libnotify-bin]
+  rpm:
+    depends: [python3, bubblewrap]
+    recommends: [polkit, curl, zstd, wl-clipboard, xclip, poppler-utils, ffmpeg-free, 7zip, git,
+                 python3-psutil, python3-pillow, python3-gobject, libnotify]
+  archlinux:
+    depends: [python, bubblewrap]
+
+contents:
+  - src: ./lumero.py
+    dst: /usr/share/lumero/lumero.py
+  - src: ./empacotar/linux/vendor
+    dst: /usr/share/lumero/vendor
+    type: tree
+  - src: ./linux/configurar-ollama.sh
+    dst: /usr/share/lumero/configurar-ollama.sh
+    file_info: {mode: 0755}
+  - src: ./empacotar/linux/lumero
+    dst: /usr/bin/lumero
+    file_info: {mode: 0755}
+  - src: ./empacotar/linux/lumero-janela
+    dst: /usr/bin/lumero-janela
+    file_info: {mode: 0755}
+  - src: ./empacotar/linux/lumero.desktop
+    dst: /usr/share/applications/lumero.desktop
+  - src: ./assets/lumero.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/lumero.svg
+  - src: ./assets/lumero.png
+    dst: /usr/share/icons/hicolor/256x256/apps/lumero.png

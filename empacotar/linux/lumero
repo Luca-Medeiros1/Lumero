@@ -1,0 +1,14 @@
+#!/bin/sh
+# Lumero instalado por pacote (.deb, .rpm ou Arch).
+# Na primeira vez, oferece instalar e configurar o Ollama (a IA que roda no computador).
+case "${1:-}" in --versao|--version) exec python3 /usr/share/lumero/lumero.py "$@" ;; esac
+if [ -t 0 ] && ! command -v ollama >/dev/null 2>&1 && [ ! -x /usr/local/bin/ollama ]; then
+    echo "O Ollama (a IA que roda no seu computador) ainda não está instalado."
+    printf "Instalar e configurar agora? Vai pedir a sua senha. [S/n] "
+    read -r resposta
+    case "$resposta" in
+        [nN]*) echo "Ok. Para configurar depois: bash /usr/share/lumero/configurar-ollama.sh" ;;
+        *) bash /usr/share/lumero/configurar-ollama.sh || echo "A configuração do Ollama não terminou." ;;
+    esac
+fi
+exec python3 /usr/share/lumero/lumero.py "$@"

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lumero
+GenericName=Assistente de IA local
+Comment=IA local que pesquisa, acha arquivos e executa tarefas no computador
+Exec=/usr/bin/lumero-janela
+Icon=lumero
+Terminal=false
+Categories=Utility;
+Keywords=lumero;ia;ai;ollama;assistente;chat;
+StartupNotify=true

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Abre o Lumero numa janela de terminal (o terminal que existir)
+CMD=/usr/bin/lumero
+if command -v ptyxis >/dev/null; then
+    if ptyxis --help 2>&1 | grep -q -- "--standalone"; then exec ptyxis --standalone -- "$CMD"; fi
+    exec ptyxis -- "$CMD"
+fi
+for t in gnome-terminal kgx konsole xfce4-terminal mate-terminal tilix alacritty kitty foot \
+         wezterm x-terminal-emulator xterm; do
+    command -v "$t" >/dev/null || continue
+    case "$t" in
+        gnome-terminal)  exec gnome-terminal --title="Lumero" -- "$CMD" ;;
+        kgx|tilix)       exec "$t" -- "$CMD" ;;
+        xfce4-terminal)  exec xfce4-terminal --title="Lumero" -x "$CMD" ;;
+        mate-terminal)   exec mate-terminal --title="Lumero" -x "$CMD" ;;
+        wezterm)         exec wezterm start -- "$CMD" ;;
+        *)               exec "$t" -e "$CMD" ;;
+    esac
+done
+notify-send "Lumero" "Não achei um programa de terminal. Abra um terminal e digite: lumero"
