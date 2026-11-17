@@ -30,6 +30,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache: false
       - name: nFPM
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
       - name: Gerar .deb, .rpm e pacote do Arch
@@ -41,7 +42,8 @@ jobs:
           ls -la pacotes
       - name: Testar o .deb
         run: |
-          sudo apt-get install -y ./pacotes/*.deb
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ./pacotes/*.deb
           lumero --versao
       - uses: actions/upload-artifact@v4
         with:
