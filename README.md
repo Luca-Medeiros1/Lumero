@@ -24,8 +24,7 @@ O instalador:
 - pergunta quais modelos baixar e recomenda um conforme a RAM e a placa de vídeo;
 - oferece bloquear a internet do Ollama. No Linux isso é feito pelo systemd e no
   Windows pelo Firewall. A pesquisa do Lumero continua funcionando com o bloqueio;
-- no Linux, oferece o modo econômico para notebooks: limita a CPU e desliga o turbo;
-- traz junto a memória e as conversas da versão antiga, a "assistente-ia".
+- no Linux, oferece o modo econômico para notebooks: limita a CPU e desliga o turbo.
 
 Para desinstalar, rode `linux/desinstalar.sh` ou `mac/desinstalar.sh`. No Windows, vá em
 Configurações → Aplicativos → Lumero.
@@ -51,17 +50,6 @@ As opções de segurança (lixeira, rede nos comandos, autoedição) só mudam n
 | Apagar | Lixeira | Lixo | Lixeira |
 
 ## Instaladores nativos (.deb, .rpm, Arch, .exe, .dmg)
-
-A pasta `.github/workflows` gera os instaladores nativos no GitHub Actions:
-
-1. Crie um repositório no GitHub e envie esta pasta.
-2. Crie uma tag: `git tag v1.0.0 && git push --tags`.
-3. Em alguns minutos, a aba **Releases** terá:
-   - `lumero_1.0.0_all.deb`: Ubuntu, Debian, Mint (`sudo apt install ./lumero_*.deb`)
-   - `lumero-1.0.0-1.noarch.rpm`: Fedora, openSUSE (`sudo dnf install ./lumero-*.rpm`)
-   - `lumero-1.0.0-1-any.pkg.tar.zst`: Arch, Manjaro (`sudo pacman -U lumero-*.pkg.tar.zst`)
-   - `Lumero-1.0.0-Windows-Setup.exe`
-   - `Lumero-1.0.0-macOS.dmg`
 
 Os pacotes do Linux instalam o Lumero. Na primeira vez que ele abre, oferece instalar e
 configurar o Ollama.
