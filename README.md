@@ -45,7 +45,8 @@ O instalador abre uma **janela** com cinco passos:
 
 1. **Boas-vindas:** pergunta como você quer ser chamado. O Lumero usa o seu nome nas conversas.
 2. **Computador:** analisa o processador, a RAM, a placa de vídeo e o espaço livre, e diz se a
-   IA vai rodar na **placa de vídeo**, no **processador** ou **nos dois**.
+   IA vai rodar na **placa de vídeo**, no **processador** ou **nos dois**. Você escolhe entre
+   automático (placa + processador), só a placa de vídeo ou só o processador.
 3. **Modelos:** mostra todos os modelos, com onde cada um roda, a velocidade estimada, o
    tamanho do download e o contexto. O melhor para o seu computador já vem marcado.
 4. **Opções:** bloquear a internet do Ollama, voz, ferramentas extras e atalhos.
@@ -58,8 +59,9 @@ pacotes da sua distribuição.
 Prefere o terminal? Use `bash linux/instalar.sh --terminal`, `bash mac/instalar.sh --terminal`
 ou `windows\instalar.ps1 -Terminal`. As perguntas são as mesmas.
 
-Para desinstalar, rode `linux/desinstalar.sh` ou `mac/desinstalar.sh`. No Windows, vá em
-**Configurações → Aplicativos → Lumero**.
+Para desinstalar, use `/desinstalar` no próprio Lumero (ou o item **Desinstalar o Lumero…** no
+botão ◐ da janela). Também dá para rodar `linux/desinstalar.sh` ou `mac/desinstalar.sh`, ou, no
+Windows, ir em **Configurações → Aplicativos → Lumero**.
 
 ## Requisitos mínimos
 
@@ -105,6 +107,17 @@ Por padrão, o Ollama usa a placa de vídeo quando ela é compatível (NVIDIA, A
 placa tiver pouca memória (como uma MX150 de 2 GB), o instalador recomenda **só o
 processador**: a diferença de velocidade é pequena e o notebook esquenta menos.
 
+Dá para trocar depois, no seletor **IA:** no alto da janela ou com `/processamento`:
+
+| Modo | Como funciona |
+|---|---|
+| Placa + processador (`auto`) | o Ollama põe na placa o que couber e o resto na RAM |
+| Só placa de vídeo (`gpu`) | o modelo inteiro na placa: o mais rápido, mas ele precisa caber nela |
+| Só processador (`cpu`) | a placa fica de fora: esquenta menos e gasta menos energia |
+
+No Linux, mudar de "só processador" para um modo com a placa (ou o contrário) altera a
+configuração do Ollama, então o sistema pede a sua senha.
+
 **Contexto** é quanto da conversa o modelo lembra de uma vez. O instalador escolhe o contexto
 pela memória que sobra depois do modelo:
 
@@ -124,8 +137,8 @@ O Lumero abre numa **janela de chat**, parecida com a do Claude e a do ChatGPT:
 - as respostas são formatadas, com tabelas e blocos de código com botão de copiar;
 - dá para anexar imagens e arquivos, arrastando ou colando;
 - aparecem os botões **Permitir** e **Negar** antes de qualquer ação arriscada;
-- no alto, dá para escolher o modelo, o raciocínio (automático, sempre ou nunca) e a leitura
-  das respostas em voz alta;
+- no alto, dá para escolher o modelo, o raciocínio (automático, sempre ou nunca), onde a IA
+  roda (placa + processador, só placa ou só processador) e a leitura das respostas em voz alta;
 - digitando `/`, aparece o menu de comandos;
 - enquanto você digita, aparecem sugestões em cinza tiradas das suas mensagens anteriores.
   Aceite com **Tab** ou **→**;
@@ -179,6 +192,8 @@ sessão.
 | `/conversas` e `/retomar` | lista e reabre conversas salvas |
 | `/ouvir` | liga ou desliga a leitura das respostas em voz alta |
 | `/tema [auto, claro ou escuro]` | aparência da janela |
+| `/processamento [auto, gpu ou cpu]` | onde a IA roda: placa + processador, só placa ou só processador |
+| `/desinstalar [lumero, ollama ou tudo]` | remove o Lumero; `ollama` remove também o Ollama e os modelos; `tudo` apaga ainda as conversas e a memória |
 
 Algumas dicas:
 
@@ -224,6 +239,7 @@ arquivo à mão também. Por exemplo:
   "CONTEXTO": 16384,
   "PENSAR": "auto",
   "TEMA": "auto",
+  "PROCESSAMENTO": "auto",
   "BUSCADOR": "duckduckgo",
   "PESQUISA_INTERNET": true,
   "EXTENSOES": true

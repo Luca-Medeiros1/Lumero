@@ -51,11 +51,12 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 29               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.4.3"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 30               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.5.0"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (o instalador escolhe pelo hardware; mude com /contexto)
+PROCESSAMENTO = ""         # onde a IA roda: auto (placa + processador), gpu ou cpu; mude com /processamento
 CONTEXTO_RECOMENDADO = 0   # o que o instalador calculou para este computador (0 = não sabe)
 NOME_USUARIO = ""          # como o Lumero chama você (o instalador pergunta; troque com /nome)
 PENSAR = "auto"            # "auto" = decide sozinho; True = sempre pensa; False = nunca
@@ -152,7 +153,7 @@ OPCOES_CONFIG = {"MODELO", "MODELO_VISAO", "CONTEXTO", "PENSAR", "OLLAMA", "BUSC
                  "SEARXNG_URL", "SEARXNG_MOTORES", "PESQUISA_INTERNET", "GERENCIAR_OLLAMA",
                  "BUSCA_FOTOS", "TEMPERATURA_PAUSA", "TEMPERATURA_RETOMA",
                  "TEMPERATURA_CRITICA", "WHISPER_MODELO", "VOZ_PIPER", "VOZ_SISTEMA",
-                 "LIMITE_MEMORIA", "NOME_USUARIO", "CONTEXTO_RECOMENDADO", "EXTENSOES"}
+                 "LIMITE_MEMORIA", "NOME_USUARIO", "CONTEXTO_RECOMENDADO", "EXTENSOES", "PROCESSAMENTO"}
 
 
 def _carregar_config():
@@ -931,6 +932,8 @@ COMANDOS_BARRA = [
     ("/modelo", "mostra ou troca o modelo"),
     ("/nome", "mostra ou troca o nome pelo qual o Lumero te chama"),
     ("/extensoes", "ferramentas que o Lumero criou: ver, ligar, desligar, remover"),
+    ("/processamento", "onde a IA roda: placa + processador, só placa ou só processador"),
+    ("/desinstalar", "remove o Lumero deste computador"),
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras (ligam sozinhos pelo assunto)"),
     ("/memoria", "o que a IA lembra sobre você"),
@@ -1000,6 +1003,13 @@ def opcoes_do_comando(comando):
             return [(m["name"], tamanho_legivel(m.get("size", 0))) for m in modelos]
         except Exception:
             return []
+    if comando == "/processamento":
+        tem_placa = placa_de_video() is not None if "placa_de_video" in globals() else True
+        return [(m, d + (" · atual" if m == PROCESSAMENTO else "")) for m, d in
+                (("auto", "placa de vídeo + processador"), ("gpu", "só a placa de vídeo"),
+                 ("cpu", "só o processador")) if tem_placa or m != "gpu"]
+    if comando == "/desinstalar":
+        return [(k, v[2]) for k, v in OPCOES_DESINSTALAR.items()] if "OPCOES_DESINSTALAR" in globals() else []
     if comando == "/extensoes":
         try:
             nomes = sorted(ler_extensoes())
@@ -1233,6 +1243,44 @@ def tratar_comando(texto, mensagens):
         if arg:
             MODELO = arg
         print(cinza(f"\n  ⎿  Modelo: {MODELO}"))
+    elif cmd == "/processamento":
+        if arg:
+            try:
+                texto_ok, aviso = trocar_processamento(arg)
+            except ValueError as erro:
+                print(vermelho(f"\n  ⎿  {erro}"))
+                return None
+            print(cinza(f"\n  ⎿  {texto_ok}"))
+            if aviso:
+                print(laranja(f"     {aviso}"))
+        else:
+            placa = placa_de_video()
+            print(cinza(f"\n  ⎿  A IA roda em: {MODOS_PROCESSAMENTO[PROCESSAMENTO]}."))
+            print(cinza("     Placa de vídeo: " + (f"{placa['nome']}" + (f" ({placa['vram_gb']:.0f} GB)" if placa.get('vram_gb') else "")
+                                                   if placa else "nenhuma que o Ollama consiga usar")))
+            print(cinza("     Para mudar: /processamento auto, /processamento gpu ou /processamento cpu"))
+    elif cmd == "/desinstalar":
+        if not arg:
+            print("\n  Remover o Lumero deste computador. Escolha:")
+            for k, v in OPCOES_DESINSTALAR.items():
+                print(f"  • {negrito('/desinstalar ' + k)}: {cinza(v[2])}")
+            return None
+        try:
+            comando, descricao = comando_desinstalar(arg)
+        except ValueError as erro:
+            print(vermelho(f"\n  ⎿  {erro}"))
+            return None
+        print(laranja(f"\n  Vai remover {descricao}."))
+        if perguntar("  Desinstalar agora? Digite " + negrito("s") + " para sim: ").strip().lower() != "s":
+            print(cinza("  ⎿  Nada foi removido."))
+            return None
+        desligar_ollama()
+        try:
+            subprocess.call(comando)
+        except OSError as erro:
+            print(vermelho(f"  ⎿  Não consegui rodar o desinstalador: {erro}"))
+            return None
+        return "sair"
     elif cmd in ("/extensoes", "/extensões"):
         try:
             texto = comando_extensoes(arg)
@@ -3011,7 +3059,7 @@ def imagem_base64(caminho, tamanho=1024):
 
 def olhar(caminho, pergunta):
     resposta = ollama_api("/api/chat", {
-        "model": MODELO_VISAO, "stream": False, "options": {"num_ctx": 4096},
+        "model": MODELO_VISAO, "stream": False, "options": opcoes_modelo(4096),
         "messages": [{"role": "user", "images": [imagem_base64(caminho)],
                       "content": pergunta + " Responda em português do Brasil."}]})
     return resposta["message"]["content"].strip()
@@ -3607,7 +3655,7 @@ def _ligar_ollama_direto():
         return "O Ollama não está instalado. Rode o instalador do Lumero de novo."
     os.makedirs(PASTA_DADOS, exist_ok=True)
     log = open(os.path.join(PASTA_DADOS, "ollama.log"), "ab")
-    ambiente = {**os.environ, **OLLAMA_AMBIENTE, "OLLAMA_CONTEXT_LENGTH": str(CONTEXTO)}
+    ambiente = _ambiente_ollama()
     extra = ({"creationflags": SEM_JANELA | 0x00000200} if EH_WINDOWS  # NEW_PROCESS_GROUP
              else {"start_new_session": True})
     proc = subprocess.Popen([programa, "serve"], stdout=log, stderr=log,
@@ -3658,6 +3706,231 @@ def desligar_ollama():
                 pass
     elif _ollama_servico_systemd():
         rodar(["systemctl", "stop", "ollama"], timeout=60)
+
+
+# ---------------------------------------------------------------------------
+# Onde a IA roda: placa de vídeo + processador (auto), só a placa ou só o processador
+# ---------------------------------------------------------------------------
+MODOS_PROCESSAMENTO = {
+    "auto": "placa de vídeo + processador (automático)",
+    "gpu": "só a placa de vídeo",
+    "cpu": "só o processador",
+}
+VARIAVEIS_SO_CPU = {"CUDA_VISIBLE_DEVICES": "-1", "OLLAMA_VULKAN": "0", "GGML_VK_VISIBLE_DEVICES": "-1"}
+DROPIN_LUMERO = "/etc/systemd/system/ollama.service.d/10-lumero.conf"
+_PLACA = {"lida": False, "valor": None}
+
+
+def placa_de_video():
+    """A placa que o Ollama consegue usar: {"nome", "vram_gb"} ou None."""
+    if _PLACA["lida"]:
+        return _PLACA["valor"]
+    placa = None
+    if EH_MAC:
+        if platform.machine() == "arm64":
+            placa = {"nome": "GPU do Mac (Apple Silicon)", "vram_gb": None}
+    else:
+        smi = shutil.which("nvidia-smi")
+        if smi:
+            r = rodar([smi, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"], timeout=10)
+            linha = (r.stdout or "").strip().splitlines()[:1]
+            if r.returncode == 0 and linha and "," in linha[0]:
+                nome, mem = linha[0].rsplit(",", 1)
+                try:
+                    placa = {"nome": nome.strip(), "vram_gb": round(float(mem) / 1024, 1)}
+                except ValueError:
+                    placa = {"nome": nome.strip(), "vram_gb": None}
+        if not placa and EH_LINUX:  # AMD (ROCm/Vulkan)
+            for vendor in glob.glob("/sys/class/drm/card*/device/vendor"):
+                try:
+                    with open(vendor) as f:
+                        if f.read().strip() != "0x1002":
+                            continue
+                    with open(os.path.join(os.path.dirname(vendor), "mem_info_vram_total")) as f:
+                        vram = int(f.read().strip()) / 1024 ** 3
+                except (OSError, ValueError):
+                    continue
+                if vram >= 1.5:
+                    placa = {"nome": "Placa AMD", "vram_gb": round(vram, 1)}
+                    break
+    _PLACA.update(lida=True, valor=placa)
+    return placa
+
+
+def opcoes_modelo(num_ctx):
+    """Opções mandadas ao Ollama em cada pedido."""
+    opcoes = {"num_ctx": num_ctx}
+    if PROCESSAMENTO == "cpu":
+        opcoes["num_gpu"] = 0      # nenhuma camada na placa
+    elif PROCESSAMENTO == "gpu" and placa_de_video():
+        opcoes["num_gpu"] = 999    # todas as camadas na placa
+    return opcoes
+
+
+def _ambiente_ollama():
+    """Variáveis para quando o Lumero liga o Ollama sozinho (Windows, Mac e Linux sem systemd)."""
+    ambiente = {**os.environ, **OLLAMA_AMBIENTE, "OLLAMA_CONTEXT_LENGTH": str(CONTEXTO)}
+    for chave in VARIAVEIS_SO_CPU:
+        ambiente.pop(chave, None)
+    if PROCESSAMENTO == "cpu" and not EH_MAC:
+        ambiente.update(VARIAVEIS_SO_CPU)
+    return ambiente
+
+
+def _placa_escondida_no_servico():
+    try:
+        with open(DROPIN_LUMERO, encoding="utf-8") as f:
+            return "CUDA_VISIBLE_DEVICES=-1" in f.read()
+    except OSError:
+        return False
+
+
+SCRIPT_MODO_SERVICO = r'''
+F=/etc/systemd/system/ollama.service.d/10-lumero.conf
+mkdir -p "$(dirname "$F")"
+[ -f "$F" ] || printf '[Service]\n' > "$F"
+sed -i '/CUDA_VISIBLE_DEVICES=-1/d;/OLLAMA_VULKAN=0/d;/GGML_VK_VISIBLE_DEVICES=-1/d;/^# só o processador/d' "$F"
+if [ "$1" = cpu ]; then
+    printf '%s\n' '# só o processador: a placa de vídeo não é usada (nem pelo CUDA nem pelo Vulkan)' \
+        'Environment="CUDA_VISIBLE_DEVICES=-1"' 'Environment="OLLAMA_VULKAN=0"' \
+        'Environment="GGML_VK_VISIBLE_DEVICES=-1"' >> "$F"
+fi
+systemctl daemon-reload
+if systemctl is-active --quiet ollama; then systemctl restart ollama; fi
+'''
+
+
+def trocar_processamento(texto):
+    """Troca onde a IA roda. Devolve (mensagem, aviso)."""
+    global PROCESSAMENTO
+    t = sem_acento(str(texto or "").strip().lower())
+    novo = {"auto": "auto", "automatico": "auto", "ambos": "auto", "os dois": "auto", "misto": "auto",
+            "placa+processador": "auto", "gpu": "gpu", "placa": "gpu", "so placa": "gpu",
+            "cpu": "cpu", "processador": "cpu", "so processador": "cpu"}.get(t)
+    if not novo:
+        raise ValueError("use auto (placa + processador), gpu (só a placa) ou cpu (só o processador)")
+    placa = placa_de_video()
+    if novo == "gpu" and not placa:
+        raise ValueError("não achei uma placa de vídeo que o Ollama consiga usar neste computador")
+    aviso = ""
+    if novo == "gpu" and placa and placa.get("vram_gb"):
+        try:
+            tamanho = next((m.get("size", 0) for m in ollama_api("/api/tags", timeout=5).get("models", [])
+                            if m.get("name") == MODELO), 0) / 1024 ** 3
+        except Exception:
+            tamanho = 0
+        if tamanho and tamanho * 1.15 + 0.5 > placa["vram_gb"]:
+            aviso = (f"O modelo {MODELO} ({f'{tamanho:.1f}'.replace('.', ',')} GB) não cabe na {placa['nome']} "
+                     f"({placa['vram_gb']:.0f} GB): no modo só placa ele pode dar erro ou ficar lento. "
+                     "O automático divide entre a placa e o processador.")
+    # a placa precisa estar visível para o Ollama (no modo só processador ela fica escondida)
+    if not EH_MAC and _ollama_servico_systemd():
+        if _placa_escondida_no_servico() != (novo == "cpu"):
+            if not shutil.which("pkexec"):
+                raise ValueError("falta o pkexec para mudar a configuração do Ollama")
+            r = rodar(["pkexec", "/bin/bash", "-c", SCRIPT_MODO_SERVICO, "lumero", novo], timeout=180)
+            if r.returncode in (126, 127):
+                raise ValueError("a senha foi cancelada; nada mudou")
+            if r.returncode != 0:
+                raise ValueError("não consegui mudar a configuração do Ollama: "
+                                 + (r.stderr or r.stdout).strip()[:200])
+    else:
+        if EH_WINDOWS:  # o instalador grava estas variáveis no usuário; o app do Ollama lê ao abrir
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE) as chave:
+                    for nome, valor in VARIAVEIS_SO_CPU.items():
+                        if novo == "cpu":
+                            winreg.SetValueEx(chave, nome, 0, winreg.REG_SZ, valor)
+                        else:
+                            try:
+                                winreg.DeleteValue(chave, nome)
+                            except OSError:
+                                pass
+            except OSError:
+                pass
+        PROCESSAMENTO = novo
+        # reinicia o Ollama com as variáveis novas (o num_gpu de cada pedido já vale na hora)
+        if not EH_MAC and (OLLAMA_LIGADO_POR_MIM["pid"] or EH_WINDOWS) and ollama_responde():
+            if OLLAMA_LIGADO_POR_MIM["pid"]:
+                desligar_ollama()
+            else:
+                rodar(["taskkill", "/IM", "ollama app.exe", "/F"], timeout=20)
+                rodar(["taskkill", "/IM", "ollama.exe", "/F"], timeout=20)
+            for _ in range(20):
+                if not ollama_responde():
+                    break
+                time.sleep(0.5)
+            OLLAMA_LIGADO_POR_MIM.update(sim=False, pid=None)
+            garantir_ollama()
+        elif EH_LINUX and novo == "cpu" and ollama_responde():
+            aviso = (aviso + " " if aviso else "") + ("O Ollama deste computador não foi ligado pelo Lumero: "
+                                                       "reinicie ele para a placa ficar totalmente de fora.")
+    PROCESSAMENTO = novo
+    gravar_config(PROCESSAMENTO=novo)
+    return f"A IA agora roda em: {MODOS_PROCESSAMENTO[novo]}.", aviso
+
+
+def dica_erro_ollama(erro):
+    texto = str(erro)
+    if PROCESSAMENTO == "gpu" and re.search(r"(?i)memory|cuda|vram|alloc|out of", texto):
+        texto += (" (No modo só placa de vídeo o modelo precisa caber inteiro na placa. "
+                  "Troque para automático com /processamento auto.)")
+    return texto
+
+
+# ---------------------------------------------------------------------------
+# Desinstalar pelo próprio Lumero
+# ---------------------------------------------------------------------------
+OPCOES_DESINSTALAR = {
+    "lumero": (False, False, "só o Lumero: mantém o Ollama, os modelos, as conversas e a memória"),
+    "ollama": (True, False, "o Lumero, o Ollama e os modelos: mantém as conversas e a memória"),
+    "tudo": (True, True, "tudo: Lumero, Ollama, modelos, conversas, memória e configurações"),
+}
+
+
+def comando_desinstalar(escolha):
+    """Devolve (comando, descrição) para desinstalar, ou levanta ValueError."""
+    escolha = sem_acento(str(escolha or "").strip().lower())
+    if escolha not in OPCOES_DESINSTALAR:
+        raise ValueError("escolha: /desinstalar lumero, /desinstalar ollama ou /desinstalar tudo")
+    ollama, dados, descricao = OPCOES_DESINSTALAR[escolha]
+    aqui = os.path.dirname(os.path.abspath(ESTE_SCRIPT))
+    if EH_WINDOWS:
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(HOME, "AppData", "Local")
+        candidatos = [os.path.join(PASTA_DADOS, "desinstalar.ps1"),
+                      os.path.join(base, "Programs", "Lumero", "windows", "desinstalar.ps1")]
+        script = next((c for c in candidatos if os.path.isfile(c)), "")
+        if not script:
+            raise ValueError("não achei o desinstalador. Use Configurações → Aplicativos → Lumero")
+        comando = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+                   "-Confirmado", "-NaoInterativo"] + (["-Ollama"] if ollama else []) + \
+                  (["-ApagarDados"] if dados else [])
+    else:
+        candidatos = [os.path.join(aqui, "desinstalar.sh"), os.path.join(PASTA_DADOS, "desinstalar.sh"),
+                      os.path.join(aqui, "mac" if EH_MAC else "linux", "desinstalar.sh")]  # pasta baixada
+        if EH_MAC:
+            candidatos += [os.path.join(d, "Lumero.app/Contents/Resources/lumero/mac/desinstalar.sh")
+                           for d in ("/Applications", os.path.join(HOME, "Applications"))]
+        script = next((c for c in candidatos if os.path.isfile(c)), "")
+        if not script:
+            raise ValueError("não achei o desinstalador. Rode linux/desinstalar.sh (ou mac/desinstalar.sh) "
+                             "da pasta do Lumero que você baixou")
+        comando = ["/bin/bash", script, "--sim", "--ollama", "1" if ollama else "0",
+                   "--dados", "1" if dados else "0"]
+    return comando, descricao
+
+
+def iniciar_desinstalacao(comando):
+    """Roda o desinstalador separado do Lumero (ele fecha o Lumero no caminho)."""
+    log = open(os.path.join(tempfile.gettempdir(), "lumero-desinstalar.log"), "ab")
+    extra = ({"creationflags": SEM_JANELA | 0x00000200} if EH_WINDOWS else {"start_new_session": True})
+    subprocess.Popen(comando, stdout=log, stderr=log, stdin=subprocess.DEVNULL, cwd=HOME, **extra)
+
+
+if PROCESSAMENTO not in MODOS_PROCESSAMENTO:  # instalações antigas: descobre pelo que o instalador deixou
+    PROCESSAMENTO = ("cpu" if (EH_LINUX and _placa_escondida_no_servico())
+                     or os.environ.get("CUDA_VISIBLE_DEVICES") == "-1" else "auto")
 
 
 def _saude_bateria():
@@ -5158,7 +5431,7 @@ def conversar(mensagens, pensar=False):
     dados = json.dumps({
         "model": MODELO, "messages": mensagens, "stream": True, "think": pensar,
         "tools": ferramentas_ativas(),
-        "options": {"num_ctx": CONTEXTO},
+        "options": opcoes_modelo(CONTEXTO),
     }).encode()
     req = urllib.request.Request(OLLAMA, data=dados,
                                  headers={"Content-Type": "application/json"})
@@ -5349,7 +5622,7 @@ def resumir_conversa(mensagens, manter=6):
     try:
         resposta = ollama_api("/api/chat", {
             "model": MODELO, "stream": False, "think": False,
-            "options": {"num_ctx": CONTEXTO},
+            "options": opcoes_modelo(CONTEXTO),
             "messages": [{"role": "user", "content":
                           "Resuma em português, em até 15 linhas, esta conversa entre um "
                           "usuário e seu assistente. Guarde fatos, decisões, nomes de "
@@ -5657,7 +5930,7 @@ def processar(texto, mensagens):
         mensagens.pop()
         return
     except RuntimeError as erro:
-        print(vermelho(f"\n  ⎿  Erro do Ollama: {erro}"))
+        print(vermelho(f"\n  ⎿  Erro do Ollama: {dica_erro_ollama(erro)}"))
         mensagens.pop()
         return
 

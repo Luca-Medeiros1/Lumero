@@ -118,6 +118,7 @@ if [ -f "$DADOS/lumero.py" ]; then
 fi
 cp "$RAIZ/lumero.py" "$DADOS/lumero.py"
 cp "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$DADOS/"
+cp "$RAIZ/mac/desinstalar.sh" "$DADOS/desinstalar.sh" && chmod +x "$DADOS/desinstalar.sh"
 cp "$RAIZ/assets/lumero.svg" "$DADOS/lumero.svg" 2>/dev/null || true
 
 echo "    Criando o ambiente Python do Lumero..."

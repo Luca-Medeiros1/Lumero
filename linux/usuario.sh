@@ -66,6 +66,7 @@ else
 fi
 cp "$RAIZ/assets/lumero.svg" "$DADOS/lumero.svg"
 cp "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$DADOS/"
+cp "$RAIZ/linux/desinstalar.sh" "$DADOS/desinstalar.sh" && chmod +x "$DADOS/desinstalar.sh"
 
 echo "    Criando o ambiente Python do Lumero..."
 PY="python3"

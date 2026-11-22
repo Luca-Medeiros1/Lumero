@@ -45,6 +45,10 @@ contents:
   - src: ./empacotar/linux/vendor
     dst: /usr/share/lumero/vendor
     type: tree
+  - src: ./linux/desinstalar.sh
+    dst: /usr/share/lumero/desinstalar.sh
+    file_info:
+      mode: 0755
   - src: ./linux/raiz.sh
     dst: /usr/share/lumero/raiz.sh
     file_info:

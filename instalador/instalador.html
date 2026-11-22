@@ -245,7 +245,7 @@ async function api(caminho, dados) {
   return j;
 }
 
-const estado = { pagina: 1, info: null, analise: null, soCpu: false, eco: false, modelos: new Set(),
+const estado = { pagina: 1, info: null, analise: null, soCpu: false, modo: "auto", eco: false, modelos: new Set(),
                  opcoes: { bloquear: true, voz: false, extras: true, atalho_area: false, manter_autostart: false } };
 const ONDE = { gpu: "Placa de vídeo", gpu_cpu: "Placa + processador", cpu: "Processador", nao_cabe: "Não cabe na memória" };
 
@@ -272,9 +272,23 @@ async function analisar() {
   estado.analise = null;
   $("#analise").innerHTML = '<div class="carregando"><span class="girando"></span> Analisando o computador…</div>';
   if (estado.pagina === 2) $("#avancar").disabled = true;
+  estado.soCpu = estado.modo === "cpu";
   estado.analise = await api("/api/analise?so_cpu=" + (estado.soCpu ? "1" : "0"));
+  if (estado.modo === "gpu") soNaPlaca(estado.analise);
   desenharAnalise();
   if (estado.pagina === 2) $("#avancar").disabled = false;
+}
+function soNaPlaca(a) {
+  // só a placa: o que não cabe inteiro nela fica de fora
+  for (const m of a.modelos) if (m.onde === "gpu_cpu" || m.onde === "cpu") {
+    m.onde = "nao_cabe"; m.motivo = "não cabe inteiro na placa"; delete m.fracao_gpu;
+  }
+  const cabem = a.modelos.filter(m => m.onde === "gpu");
+  const bons = cabem.filter(m => m.tokens_s >= 6);
+  const rec = (bons.length ? bons.sort((x, y) => y.qualidade - x.qualidade || y.tokens_s - x.tokens_s)[0]
+                           : cabem.sort((x, y) => y.tokens_s - x.tokens_s)[0]);
+  a.modelos.forEach(m => m.recomendado = !!rec && m.nome === rec.nome);
+  if (rec) a.recomendado = rec.nome;
 }
 function desenharAnalise() {
   const a = estado.analise, c = $("#analise"); c.innerHTML = "";
@@ -304,15 +318,18 @@ function desenharAnalise() {
     c.append(el("div", "titulo-sec", "Onde rodar a IA"));
     const esc = el("div", "escolha");
     const op = (valor, titulo, desc) => {
-      const l = el("label", "opcao" + (estado.soCpu === valor ? " marcada" : ""));
-      const r = el("input"); r.type = "radio"; r.name = "onde"; r.checked = estado.soCpu === valor;
-      r.onchange = () => { estado.soCpu = valor; estado.modelos.clear(); analisar(); };
+      const l = el("label", "opcao" + (estado.modo === valor ? " marcada" : ""));
+      const r = el("input"); r.type = "radio"; r.name = "onde"; r.checked = estado.modo === valor;
+      r.onchange = () => { estado.modo = valor; estado.modelos.clear(); analisar(); };
       const t = el("div"); t.append(el("b", "", titulo), el("small", "", desc));
       l.append(r, t); esc.append(l);
     };
-    op(false, "Automático: placa de vídeo + processador" + (a.recomenda_so_cpu ? "" : " (recomendado)"),
+    op("auto", "Automático: placa de vídeo + processador" + (a.recomenda_so_cpu ? "" : " (recomendado)"),
        "O Ollama põe na placa o que couber e o resto na memória do processador.");
-    op(true, "Só o processador" + (a.recomenda_so_cpu ? " (recomendado)" : ""),
+    if (!a.recomenda_so_cpu && (a.placa_usada || estado.modo === "gpu"))
+      op("gpu", "Só a placa de vídeo",
+         "Usa só os modelos que cabem inteiros na placa: os mais rápidos, mas os maiores ficam de fora.");
+    op("cpu", "Só o processador" + (a.recomenda_so_cpu ? " (recomendado)" : ""),
        "Não usa a placa de vídeo. Esquenta menos e gasta menos energia; em placas pequenas a velocidade quase não muda.");
     c.append(esc);
   }
@@ -340,7 +357,7 @@ function desenharModelos() {
     if (m.recomendado) nome.append(el("span", "chip-rec", "Recomendado"));
     meio.append(nome, el("div", "desc", m.descricao));
     const et = el("div", "etiquetas");
-    et.append(el("span", "etiqueta " + m.onde, ONDE[m.onde] + (m.fracao_gpu ? ` · ${m.fracao_gpu}% na placa` : "")));
+    et.append(el("span", "etiqueta " + m.onde, (m.motivo ? "Não cabe inteiro na placa" : ONDE[m.onde]) + (m.fracao_gpu ? ` · ${m.fracao_gpu}% na placa` : "")));
     et.append(el("span", "etiqueta", "precisa de ~" + m.precisa_gb.toFixed(1).replace(".", ",") + " GB de memória"));
     if (cabe) { const c = el("span", "etiqueta", "contexto " + m.contexto_texto); c.title = "Quanto da conversa o modelo consegue lembrar de uma vez (dá para mudar depois no Lumero)"; et.append(c); }
     meio.append(et);
@@ -351,7 +368,7 @@ function desenharModelos() {
       const nivel = { rapido: 4, bom: 3, lento: 2, muito_lento: 1 }[m.velocidade];
       const b = el("div", "barras v" + nivel); for (let i = 0; i < 4; i++) b.append(el("i"));
       lado.append(b, el("div", "vel", `${m.velocidade_texto} · ~${Math.round(m.tokens_s)} tokens/s`));
-    } else lado.append(el("div", "vel", "não cabe neste computador"));
+    } else lado.append(el("div", "vel", m.motivo || "não cabe neste computador"));
     card.append(cb, meio, lado); c.append(card);
   }
   resumo();
@@ -427,7 +444,7 @@ async function instalar() {
   }
   $("#aviso-senha").style.display = estado.info.so === "linux" ? "block" : "none";
   const dados = { modelos: estado.analise.modelos.filter(m => estado.modelos.has(m.nome)).map(m => m.nome),
-                  so_cpu: estado.soCpu, eco: estado.eco, nome: $("#nome").value.trim(), ...estado.opcoes };
+                  so_cpu: estado.modo === "cpu", processamento: estado.modo, eco: estado.eco, nome: $("#nome").value.trim(), ...estado.opcoes };
   try { await api("/api/instalar", dados); } catch (e) { fim(false, e.message); }
 }
 function fim(sucesso, mensagem) {
@@ -496,8 +513,8 @@ setInterval(() => api("/api/vivo", {}).catch(() => {}), 20000);
   conectar();
   irPara(1);
   analisar().then(() => {
-    estado.soCpu = !!estado.analise.recomenda_so_cpu;
-    if (estado.soCpu) { estado.modelos.clear(); return analisar(); }
+    estado.modo = estado.analise.recomenda_so_cpu ? "cpu" : "auto";
+    if (estado.modo === "cpu") { estado.modelos.clear(); return analisar(); }
   }).catch(e => { $("#analise").textContent = "Não consegui analisar o computador: " + e.message; });
 })();
 </script>

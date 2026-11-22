@@ -217,6 +217,8 @@ def instalar(op):
                 valores["NOME_USUARIO"] = nome
             if PACOTE and op.get("modelos"):
                 valores["MODELO"] = op["modelos"][0]
+            if op.get("processamento") in ("auto", "gpu", "cpu"):
+                valores["PROCESSAMENTO"] = op["processamento"]
             if op.get("modelos"):
                 item = next((m for m in HW.analisar(bool(op.get("so_cpu")))["modelos"]
                              if m["nome"] == op["modelos"][0]), None)

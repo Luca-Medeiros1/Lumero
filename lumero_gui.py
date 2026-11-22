@@ -574,7 +574,7 @@ def turno(texto, anexos):
         if not ESTADO["ollama_erro"]:
             evento("aviso", texto="Pronto, pode mandar a mensagem de novo.")
     except RuntimeError as erro:
-        evento("erro", texto=f"Erro do Ollama: {erro}")
+        evento("erro", texto=f"Erro do Ollama: {L.dica_erro_ollama(erro)}")
         if mensagens and mensagens[-1]["role"] == "user":
             mensagens.pop()
     except Exception as erro:  # nunca deixa a janela travada em "ocupado"
@@ -612,6 +612,8 @@ COMANDOS_JANELA = [
     ("/retomar", "abre uma conversa salva (sem nada: a última)"),
     ("/ouvir", "liga/desliga a leitura das respostas em voz alta"),
     ("/tema", "aparência: automático, claro ou escuro"),
+    ("/processamento", "onde a IA roda: placa + processador, só placa ou só processador"),
+    ("/desinstalar", "remove o Lumero deste computador"),
 ]
 APELIDOS = {"/extensões": "/extensoes", "/limpar": "/nova", "/clear": "/nova", "/help": "/ajuda", "/memória": "/memoria"}
 TEMAS = {"auto": "automático (igual ao sistema)", "claro": "claro", "escuro": "escuro"}
@@ -708,7 +710,7 @@ def opcoes_janela(comando):
         return [(c["id"], c["titulo"][:50]) for c in lista_conversas()[:15]]
     if comando == "/modelo":
         return [(m, "instalado") for m in modelos_instalados()]
-    if comando in ("/pensar", "/extras", "/contexto", "/extensoes"):
+    if comando in ("/pensar", "/extras", "/contexto", "/extensoes", "/processamento", "/desinstalar"):
         return L.opcoes_do_comando(comando)
     return []
 
@@ -805,6 +807,36 @@ def comando_janela(texto):
             r["texto"] = f"Modelo: **{L.MODELO}**\n\nInstalados: " + (", ".join(f"`{m}`" for m in modelos_instalados()) or "nenhum")
     elif cmd == "/extensoes":
         r["texto"] = L.comando_extensoes(arg)
+    elif cmd == "/processamento":
+        if arg:
+            texto, aviso = L.trocar_processamento(arg)
+            r["texto"] = texto + (f"\n\n⚠️ {aviso}" if aviso else "")
+        else:
+            placa = L.placa_de_video()
+            r["texto"] = (f"A IA roda em: **{L.MODOS_PROCESSAMENTO[L.PROCESSAMENTO]}**.\n\nPlaca de vídeo: "
+                          + (placa["nome"] + (f" ({placa['vram_gb']:.0f} GB)" if placa.get("vram_gb") else "")
+                             if placa else "nenhuma que o Ollama consiga usar")
+                          + "\n\nPara mudar: `/processamento auto`, `/processamento gpu` ou `/processamento cpu` "
+                            "(ou o seletor no alto da janela).")
+    elif cmd == "/desinstalar":
+        if not arg:
+            r["texto"] = ("**Desinstalar o Lumero.** Escolha o que remover:\n\n" + "\n".join(
+                f"- `/desinstalar {k}`: {v[2]}" for k, v in L.OPCOES_DESINSTALAR.items())
+                + "\n\nAntes de remover, aparece um pedido de confirmação.")
+        else:
+            if ESTADO["ocupado"]:
+                raise ValueError("espere a resposta terminar")
+            comando, descricao = L.comando_desinstalar(arg)
+            if not pedir_confirmacao("Desinstalar o Lumero?", f"Vai remover {descricao}.", perigo=True,
+                                     aviso="A janela fecha durante a desinstalação. "
+                                           + ("" if L.EH_WINDOWS else "O sistema pode pedir a sua senha. ")
+                                           + "No fim aparece um aviso."):
+                r["texto"] = "Nada foi removido."
+            else:
+                L.desligar_ollama()
+                L.iniciar_desinstalacao(comando)
+                r["texto"] = "Desinstalando… A janela vai fechar."
+                r["acao"] = "desinstalando"
     elif cmd == "/nome":
         if arg:
             L.trocar_nome(arg)
@@ -905,6 +937,7 @@ def estado():
             "titulo": conversa_atual().titulo, "so": L.SO,
             "contexto": min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO))),
             "tema": tema_escolhido(), "nome": L.NOME_USUARIO,
+            "processamento": L.PROCESSAMENTO, "placa": L.placa_de_video(),
             "contexto_limite": L.CONTEXTO, "contexto_recomendado": L.CONTEXTO_RECOMENDADO,
             "contexto_opcoes": L.CONTEXTO_OPCOES, "tema_sistema": tema_do_sistema(),
             "proxima": L.CONTEXTO_SUGESTAO["proxima"]}
@@ -1123,6 +1156,11 @@ class Pedido(http.server.BaseHTTPRequestHandler):
         if "pensar" in dados:
             L.PENSAR = {"sempre": True, "nunca": False}.get(dados["pensar"], "auto")
             gravar_config(PENSAR=L.PENSAR)
+        if "processamento" in dados:
+            texto, aviso = L.trocar_processamento(str(dados["processamento"]))
+            resultado = estado()
+            resultado["mensagem"], resultado["aviso"] = texto, aviso
+            return resultado
         if "contexto" in dados:
             novo, aviso = L.trocar_contexto(str(dados["contexto"]))
             resultado = estado()
