@@ -33,6 +33,24 @@ WebView2 no Windows. Se ele faltar, o chat abre no navegador no modo aplicativo.
 os casos, nada sai do computador: a página conversa com o Lumero em `127.0.0.1`, com uma
 senha de sessão.
 
+## Funções novas (extensões)
+
+Peça algo que o Lumero ainda não faz, por exemplo "cria uma ferramenta que converte
+temperaturas", e ele escreve uma **extensão**: um arquivo Python pequeno, que vira uma
+ferramenta nova. Antes de salvar:
+
+1. o código é conferido e testado **sem internet e sem poder gravar nada**;
+2. aparece o cartão **Permitir/Negar** com o código inteiro e o resultado do teste.
+
+Depois, a extensão roda sempre isolada (bubblewrap no Linux, sandbox-exec no Mac), sem
+internet (a não ser que ela precise e você tenha aprovado) e só podendo mexer na sua pasta
+pessoal. No Windows não há essa proteção, então cada uso pergunta antes. O `lumero.py` nunca
+é alterado: as extensões ficam na pasta `extensoes/` dos dados do Lumero.
+
+Gerencie com `/extensoes`: `ver NOME` (mostra o código), `desligar NOME`, `ligar NOME` e
+`remover NOME` (guarda uma cópia em `extensoes/antigas`). Para desligar tudo, ponha
+`"EXTENSOES": false` no `config.json`.
+
 ## Requisitos mínimos
 
 | | Mínimo | Recomendado |

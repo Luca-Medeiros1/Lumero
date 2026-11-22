@@ -17,6 +17,7 @@ O que a IA consegue fazer:
   - comandos de administrador pedindo a sua senha na janela do sistema
   - volume, brilho, lembretes, data/hora, bateria/RAM/disco e muito mais
 """
+import ast
 import ctypes
 import datetime
 import difflib
@@ -50,8 +51,8 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 25               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.3.0"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 26               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.4.0"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (o instalador escolhe pelo hardware; mude com /contexto)
@@ -100,6 +101,7 @@ USAR_LIXEIRA = True         # True = a IA não pode usar rm; apagar = mandar par
 MODELO_VISAO = MODELO      # o qwen3.5 também enxerga imagens; "" desliga a visão
 
 # Cuidados com o computador
+EXTENSOES = True            # True = a IA pode criar ferramentas novas (extensões isoladas, com sua permissão)
 AUTOEDICAO = False          # True = a IA pode alterar o próprio script (o modelo 4b erra bastante nisso)
 BUSCA_FOTOS = False         # True = procurar fotos pelo conteúdo (analisa foto por foto: pesado aqui)
 GERENCIAR_OLLAMA = True     # liga o Ollama ao abrir o assistente e desliga ao sair
@@ -150,7 +152,7 @@ OPCOES_CONFIG = {"MODELO", "MODELO_VISAO", "CONTEXTO", "PENSAR", "OLLAMA", "BUSC
                  "SEARXNG_URL", "SEARXNG_MOTORES", "PESQUISA_INTERNET", "GERENCIAR_OLLAMA",
                  "BUSCA_FOTOS", "TEMPERATURA_PAUSA", "TEMPERATURA_RETOMA",
                  "TEMPERATURA_CRITICA", "WHISPER_MODELO", "VOZ_PIPER", "VOZ_SISTEMA",
-                 "LIMITE_MEMORIA", "NOME_USUARIO", "CONTEXTO_RECOMENDADO"}
+                 "LIMITE_MEMORIA", "NOME_USUARIO", "CONTEXTO_RECOMENDADO", "EXTENSOES"}
 
 
 def _carregar_config():
@@ -928,6 +930,7 @@ COMANDOS_BARRA = [
     ("/pensamento", "mostra o raciocínio da última resposta"),
     ("/modelo", "mostra ou troca o modelo"),
     ("/nome", "mostra ou troca o nome pelo qual o Lumero te chama"),
+    ("/extensoes", "ferramentas que o Lumero criou: ver, ligar, desligar, remover"),
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras (ligam sozinhos pelo assunto)"),
     ("/memoria", "o que a IA lembra sobre você"),
@@ -997,6 +1000,14 @@ def opcoes_do_comando(comando):
             return [(m["name"], tamanho_legivel(m.get("size", 0))) for m in modelos]
         except Exception:
             return []
+    if comando == "/extensoes":
+        try:
+            nomes = sorted(ler_extensoes())
+        except NameError:
+            nomes = []
+        return [(f"{a} {n}", d) for n in nomes for a, d in
+                (("ver", "mostra o código"), ("desligar", "deixa de usar"), ("ligar", "volta a usar"),
+                 ("remover", "apaga (guarda uma cópia)"))]
     if comando == "/contexto":
         return [("recomendado", f"o calculado para este computador ({contexto_legivel(CONTEXTO_RECOMENDADO or 8192)})")] + \
             [(contexto_legivel(c).lower(), f"{c} tokens" + (" · recomendado" if c == CONTEXTO_RECOMENDADO else "")
@@ -1222,6 +1233,14 @@ def tratar_comando(texto, mensagens):
         if arg:
             MODELO = arg
         print(cinza(f"\n  ⎿  Modelo: {MODELO}"))
+    elif cmd in ("/extensoes", "/extensões"):
+        try:
+            texto = comando_extensoes(arg)
+        except ValueError as erro:
+            print(vermelho(f"\n  ⎿  {erro}"))
+            return None
+        texto = re.sub(r"\*\*(.+?)\*\*", lambda m: negrito(m.group(1)), texto)
+        print("\n" + "\n".join("  " + linha for linha in texto.replace("`", "").splitlines()))
     elif cmd == "/nome":
         if arg:
             trocar_nome(arg)
@@ -5265,6 +5284,10 @@ def prompt_sistema():
            "comportamento), use ver_proprio_codigo para achar o trecho e depois "
            "editar_proprio_codigo, copiando texto_antigo exatamente. Faça mudanças "
            "pequenas e uma de cada vez. " if AUTOEDICAO else "") +
+        ("Se o usuário pedir uma função que nenhuma ferramenta faz e que dá para resolver com um "
+           "programa curto em Python (cálculos, conversões, ler ou gerar arquivos, consultar um site), "
+           "ofereça criar uma ferramenta nova com criar_extensao; depois use a ferramenta criada. "
+           if EXTENSOES else "") +
         "Para apagar arquivos use lixeira (acao 'apagar'). Se o usuário pedir para "
         "lembrar algo para sempre, use memoria; para avisar num horário, lembretes. "
         "Para contas, use calcular em vez de calcular de cabeça. Quando pedirem um "
@@ -5643,6 +5666,394 @@ def processar(texto, mensagens):
         salvar_conversa(mensagens, "ultima")
     except OSError:
         pass
+
+
+# ============================================================================
+# Extensões: funções novas que o próprio Lumero escreve (com a sua permissão)
+#   Cada extensão é um arquivo .py na pasta extensoes/, com uma função executar().
+#   Ela roda num processo separado, dentro da mesma proteção dos comandos
+#   (bubblewrap no Linux, sandbox-exec no Mac). O lumero.py nunca é alterado.
+# ============================================================================
+PASTA_EXTENSOES = os.path.join(PASTA_DADOS, "extensoes")
+ARQ_EXTENSOES = os.path.join(PASTA_EXTENSOES, "extensoes.json")
+TIPOS_EXTENSAO = {"string", "number", "integer", "boolean"}
+NOS_PERMITIDOS_EXTENSAO = (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef,
+                           ast.Assign, ast.AnnAssign)
+
+EXECUTOR_EXTENSAO = r'''# Roda uma extensão do Lumero (gerado automaticamente)
+import importlib.util, json, sys, traceback
+arquivo, modo = sys.argv[1], sys.argv[2]
+try:
+    args = json.loads(sys.stdin.read() or "{}")
+    spec = importlib.util.spec_from_file_location("extensao_lumero", arquivo)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    funcao = getattr(modulo, "executar", None)
+    if not callable(funcao):
+        print("##ERRO o código não tem a função executar()")
+        sys.exit(3)
+    if modo == "carregar":
+        print("##OK")
+        sys.exit(0)
+    resultado = funcao(**args)
+    if not isinstance(resultado, str):
+        resultado = json.dumps(resultado, ensure_ascii=False, default=str, indent=1)
+    print("##RESULTADO")
+    print(resultado)
+except SystemExit:
+    raise
+except BaseException:
+    linhas = traceback.format_exc().strip().splitlines()
+    print("##ERRO " + "\n".join(linhas[-6:]))
+    sys.exit(4)
+'''
+
+
+def ler_extensoes():
+    try:
+        with open(ARQ_EXTENSOES, encoding="utf-8") as f:
+            dados = json.load(f)
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def gravar_extensoes(dados):
+    os.makedirs(PASTA_EXTENSOES, exist_ok=True)
+    temporario = ARQ_EXTENSOES + ".tmp"
+    with open(temporario, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=2, ensure_ascii=False)
+    os.replace(temporario, ARQ_EXTENSOES)
+
+
+def extensoes_isoladas():
+    """True se as extensões rodam dentro de uma sandbox neste sistema."""
+    if EH_LINUX:
+        return bool(shutil.which("bwrap"))
+    if EH_MAC:
+        return bool(shutil.which("sandbox-exec"))
+    return False
+
+
+def _rodar_extensao_isolada(arquivo, modo, args, rede=False, so_leitura=False, timeout=None):
+    """Roda o executor num processo separado. Devolve (ok, texto)."""
+    os.makedirs(PASTA_EXTENSOES, exist_ok=True)
+    executor = os.path.join(PASTA_EXTENSOES, "_executor.py")
+    try:
+        with open(executor, encoding="utf-8") as f:
+            atualizado = f.read() == EXECUTOR_EXTENSAO
+    except OSError:
+        atualizado = False
+    if not atualizado:
+        with open(executor, "w", encoding="utf-8") as f:
+            f.write(EXECUTOR_EXTENSAO)
+    comando = [sys.executable, "-I", executor, arquivo, modo]
+    pasta = tempfile.gettempdir() if so_leitura else HOME
+    if EH_LINUX:
+        sandbox = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+                   "--tmpfs", "/tmp"]
+        if not so_leitura:
+            sandbox += ["--bind", HOME, HOME]
+            for extra in PASTAS_PERMITIDAS[1:]:
+                if os.path.isdir(extra):
+                    sandbox += ["--bind", extra, extra]
+        sandbox += ["--unshare-pid", "--die-with-parent", "--new-session",
+                    "--chdir", "/tmp" if so_leitura else HOME]
+        if not rede:
+            sandbox.append("--unshare-net")
+        comando = sandbox + comando
+    elif EH_MAC and shutil.which("sandbox-exec"):
+        if so_leitura:
+            perfil = "\n".join(["(version 1)", "(allow default)", "(deny file-write*)",
+                                '(allow file-write* (subpath "/private/tmp") '
+                                '(subpath "/private/var/folders") (subpath "/dev"))',
+                                '(deny network-outbound (remote ip "*:*"))'])
+        else:
+            perfil = _perfil_sandbox_mac(rede)
+        comando = ["sandbox-exec", "-p", perfil] + comando
+    ambiente = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+    r = rodar(comando, timeout=timeout or TEMPO_LIMITE, input=json.dumps(args, ensure_ascii=False),
+              cwd=pasta, env=ambiente, encoding="utf-8")
+    saida = (r.stdout or "").strip()
+    if "##RESULTADO" in saida:
+        return True, _cortar_saida(saida.split("##RESULTADO", 1)[1].strip()) or "(sem resultado)"
+    if "##OK" in saida:
+        return True, ""
+    if "##ERRO" in saida:
+        return False, saida.split("##ERRO", 1)[1].strip()
+    erro = (r.stderr or "").strip() or saida or f"código {r.returncode}"
+    if "timed out" in erro or "TimeoutExpired" in erro:
+        erro = f"passou de {timeout or TEMPO_LIMITE} segundos"
+    return False, _cortar_saida(erro)
+
+
+def _parametros_extensao(texto):
+    """Aceita JSON {"nome": {"tipo": ..., "descricao": ...}} ou {"nome": "descrição"}."""
+    if isinstance(texto, dict):
+        dados = texto
+    else:
+        texto = str(texto or "").strip()
+        if not texto:
+            return {}
+        try:
+            dados = json.loads(texto)
+        except ValueError:
+            raise ValueError('parametros precisa ser JSON, ex: {"cidade": {"tipo": "string", '
+                             '"descricao": "nome da cidade"}}')
+    if not isinstance(dados, dict):
+        raise ValueError("parametros precisa ser um objeto JSON")
+    saida = {}
+    for nome, info in dados.items():
+        if not re.fullmatch(r"[a-z_][a-z0-9_]{0,30}", str(nome)):
+            raise ValueError(f"nome de parâmetro inválido: {nome} (use letras minúsculas e _)")
+        if isinstance(info, str):
+            info = {"tipo": "string", "descricao": info}
+        tipo = str(info.get("tipo") or info.get("type") or "string").lower()
+        tipo = {"str": "string", "texto": "string", "int": "integer", "inteiro": "integer",
+                "float": "number", "numero": "number", "bool": "boolean"}.get(tipo, tipo)
+        if tipo not in TIPOS_EXTENSAO:
+            raise ValueError(f"tipo inválido para {nome}: {tipo} (use string, number, integer ou boolean)")
+        saida[nome] = {"tipo": tipo, "descricao": str(info.get("descricao") or info.get("description") or nome)[:200]}
+    return saida
+
+
+def _validar_codigo_extensao(codigo, parametros):
+    """Confere o código sem rodar. Devolve a lista de obrigatórios ou levanta ValueError."""
+    try:
+        arvore = ast.parse(codigo)
+    except SyntaxError as erro:
+        raise ValueError(f"erro de sintaxe na linha {erro.lineno}: {erro.msg}")
+    executar = None
+    for no in arvore.body:
+        if isinstance(no, ast.Expr) and isinstance(getattr(no, "value", None), ast.Constant):
+            continue  # texto de documentação
+        if not isinstance(no, NOS_PERMITIDOS_EXTENSAO):
+            raise ValueError(f"linha {no.lineno}: fora das funções só pode haver imports, "
+                             "constantes e definições (nada que rode ao carregar)")
+        if isinstance(no, ast.FunctionDef) and no.name == "executar":
+            executar = no
+    if not executar:
+        raise ValueError("o código precisa de uma função def executar(...) que devolva um texto")
+    a = executar.args
+    if a.vararg or a.kwarg or a.posonlyargs:
+        raise ValueError("executar() não pode usar *args ou **kwargs: declare cada parâmetro")
+    nomes = [x.arg for x in a.args + a.kwonlyargs]
+    if set(nomes) != set(parametros):
+        raise ValueError(f"os parâmetros de executar() ({', '.join(nomes) or 'nenhum'}) precisam ser "
+                         f"os mesmos de parametros ({', '.join(parametros) or 'nenhum'})")
+    sem_padrao = len(a.args) - len(a.defaults)
+    obrigatorios = [x.arg for x in a.args[:sem_padrao]]
+    obrigatorios += [x.arg for x, d in zip(a.kwonlyargs, a.kw_defaults) if d is None]
+    return obrigatorios
+
+
+def _registrar_extensao(nome, meta):
+    def chamar(**args):
+        return rodar_extensao(nome, args)
+    chamar.__name__ = nome
+    props = {p: {"type": i["tipo"], "description": i["descricao"]}
+             for p, i in meta.get("parametros", {}).items()}
+    FERRAMENTAS[nome] = {
+        "func": chamar,
+        # sem sandbox (Windows), ou se mexe em arquivos: pergunta antes de cada uso
+        "confirmar": bool(meta.get("altera_arquivos")) or not extensoes_isoladas(),
+        "grupo": None,
+        "extensao": True,
+        "schema": {"type": "function", "function": {
+            "name": nome, "description": meta.get("descricao", "") + " (extensão criada pelo Lumero)",
+            "parameters": {"type": "object", "properties": props,
+                           "required": meta.get("obrigatorios", [])}}},
+    }
+
+
+def carregar_extensoes():
+    for nome in [n for n, f in FERRAMENTAS.items() if f.get("extensao")]:
+        del FERRAMENTAS[nome]
+    if not EXTENSOES:
+        return
+    for nome, meta in ler_extensoes().items():
+        arquivo = os.path.join(PASTA_EXTENSOES, nome + ".py")
+        if meta.get("ligada", True) and os.path.isfile(arquivo) and \
+                (nome not in FERRAMENTAS or FERRAMENTAS[nome].get("extensao")):
+            _registrar_extensao(nome, meta)
+
+
+def rodar_extensao(nome, args):
+    meta = ler_extensoes().get(nome)
+    if not meta:
+        return f"Erro: a extensão {nome} não existe mais."
+    ok, texto = _rodar_extensao_isolada(os.path.join(PASTA_EXTENSOES, nome + ".py"), "executar",
+                                        args, rede=bool(meta.get("rede")))
+    return texto if ok else f"Erro na extensão {nome}: {texto}"
+
+
+def confirmar_codigo(titulo, detalhes, codigo, aviso="", perigo=False):
+    """Mostra o código e pergunta. A janela troca esta função por um cartão."""
+    print()
+    print(quebrar(negrito(titulo) + " " + cinza(detalhes.replace("\n", " · ")), "  ", "  "))
+    for linha in codigo.splitlines()[:80]:
+        print(cinza("  │ ") + linha)
+    if len(codigo.splitlines()) > 80:
+        print(cinza("  │ ..."))
+    if aviso:
+        print(laranja("  " + aviso))
+    return perguntar("  Permitir? Digite " + negrito("s") + " para sim: ").strip().lower() == "s"
+
+
+@ferramenta(
+    "Cria uma ferramenta nova para você mesmo (uma extensão em Python), quando o usuário pede "
+    "algo que nenhuma ferramenta faz. Escreva um código com def executar(...) que recebe os "
+    "parâmetros e devolve um texto. Use só a biblioteca padrão do Python. O código roda isolado, "
+    "é testado e o usuário aprova antes de salvar. Com o mesmo nome, atualiza a extensão.",
+    {"nome": ("string", "Nome da ferramenta em minúsculas com _, ex: converter_temperatura"),
+     "descricao": ("string", "O que a ferramenta faz e quando usar (uma frase)"),
+     "parametros": ("string", 'JSON dos parâmetros, ex: {"celsius": {"tipo": "number", '
+                              '"descricao": "temperatura em °C"}}. Tipos: string, number, integer, boolean'),
+     "codigo": ("string", "Código Python completo, com def executar(...) usando os mesmos parâmetros"),
+     "teste": ("string", 'JSON com valores de exemplo para testar, ex: {"celsius": 30}'),
+     "rede": ("boolean", "true se precisa acessar a internet"),
+     "altera_arquivos": ("boolean", "true se cria, muda ou apaga arquivos")},
+    ["nome", "descricao", "codigo"], ativa=EXTENSOES)
+def criar_extensao(nome, descricao, codigo, parametros="", teste="", rede=False, altera_arquivos=False):
+    nome = str(nome or "").strip().lower()
+    if not re.fullmatch(r"[a-z][a-z0-9_]{2,40}", nome):
+        return "Erro: nome inválido. Use de 3 a 40 letras minúsculas, números e _ (ex: converter_moeda)."
+    if nome in FERRAMENTAS and not FERRAMENTAS[nome].get("extensao"):
+        return f"Erro: já existe uma ferramenta do Lumero chamada {nome}. Escolha outro nome."
+    if EH_LINUX and not shutil.which("bwrap"):
+        return "Erro: a sandbox não está instalada. O usuário pode rodar: " + como_instalar("bubblewrap")
+    try:
+        params = _parametros_extensao(parametros)
+        codigo = str(codigo or "").strip("\n") + "\n"
+        if len(codigo) > 20000:
+            raise ValueError("código grande demais (máximo de 20 mil caracteres)")
+        obrigatorios = _validar_codigo_extensao(codigo, params)
+        tem_teste = bool(teste.strip()) if isinstance(teste, str) else isinstance(teste, dict)
+        exemplo = json.loads(teste) if isinstance(teste, str) and teste.strip() else (teste or {})
+        if not tem_teste and not params:
+            tem_teste = True  # sem parâmetros: dá para testar do mesmo jeito
+        if not isinstance(exemplo, dict):
+            raise ValueError("teste precisa ser um objeto JSON")
+    except ValueError as erro:
+        return f"Erro: {erro}. Corrija e chame criar_extensao de novo."
+    rede, altera_arquivos = bool(rede), bool(altera_arquivos)
+
+    # 1) teste antes de pedir permissão: sem internet e sem poder alterar nada
+    os.makedirs(PASTA_EXTENSOES, exist_ok=True)
+    rascunho = os.path.join(PASTA_EXTENSOES, f".rascunho-{nome}.py")
+    with open(rascunho, "w", encoding="utf-8") as f:
+        f.write(codigo)
+    resultado_teste = "(não testado: sem sandbox neste sistema, roda depois da sua permissão)"
+    try:
+        if extensoes_isoladas():
+            ok, texto = _rodar_extensao_isolada(rascunho, "carregar", {}, so_leitura=True, timeout=30)
+            if not ok:
+                return f"Erro ao carregar o código: {texto}\nCorrija e chame criar_extensao de novo."
+            if tem_teste and not rede and not altera_arquivos:
+                ok, texto = _rodar_extensao_isolada(rascunho, "executar", exemplo, so_leitura=True, timeout=30)
+                if not ok:
+                    if "Read-only file system" in texto or "Permission denied" in texto:
+                        texto += ("\n(no teste nada pode ser gravado; se a ferramenta cria ou muda arquivos, "
+                                  "chame de novo com altera_arquivos=true)")
+                    return f"Erro no teste com {json.dumps(exemplo, ensure_ascii=False)}: {texto}\nCorrija e chame criar_extensao de novo."
+                resultado_teste = texto
+            elif tem_teste:
+                resultado_teste = "(testa depois da sua permissão, porque usa a internet ou mexe em arquivos)"
+
+        # 2) permissão, mostrando o código
+        existe = nome in ler_extensoes()
+        detalhes = [descricao.strip()]
+        if params:
+            detalhes.append("parâmetros: " + ", ".join(params))
+        detalhes.append("acessa a internet" if rede else "sem internet")
+        if altera_arquivos:
+            detalhes.append("pode criar ou mudar arquivos na sua pasta pessoal (pergunta a cada uso)")
+        if not extensoes_isoladas():
+            detalhes.append("sem sandbox neste sistema: pergunta a cada uso")
+        if tem_teste and not resultado_teste.startswith("("):
+            detalhes.append("teste: " + resultado_teste.replace("\n", " ")[:200])
+        if extensoes_isoladas():
+            detalhes.append("roda isolado (sandbox), só podendo alterar a sua pasta pessoal")
+        aviso = "Vai substituir a versão atual desta extensão (a antiga fica guardada)." if existe else ""
+        if not confirmar_codigo(("Atualizar" if existe else "Criar") + f" a ferramenta {nome}?",
+                                "\n".join(detalhes), codigo, aviso, perigo=altera_arquivos or rede):
+            return "O usuário não permitiu criar essa extensão."
+
+        # 3) salva (a versão anterior vai para extensoes/antigas)
+        arquivo = os.path.join(PASTA_EXTENSOES, nome + ".py")
+        if os.path.exists(arquivo):
+            antigas = os.path.join(PASTA_EXTENSOES, "antigas")
+            os.makedirs(antigas, exist_ok=True)
+            shutil.copy2(arquivo, os.path.join(antigas, f"{nome}-{datetime.datetime.now():%Y%m%d-%H%M%S}.py"))
+        os.replace(rascunho, arquivo)
+    finally:
+        if os.path.exists(rascunho):
+            os.remove(rascunho)
+    dados = ler_extensoes()
+    dados[nome] = {"descricao": descricao.strip()[:300], "parametros": params, "obrigatorios": obrigatorios,
+                   "rede": rede, "altera_arquivos": altera_arquivos, "ligada": True,
+                   "criada": dados.get(nome, {}).get("criada") or datetime.datetime.now().isoformat(timespec="seconds"),
+                   "atualizada": datetime.datetime.now().isoformat(timespec="seconds")}
+    gravar_extensoes(dados)
+    _registrar_extensao(nome, dados[nome])
+    texto = f"Extensão {nome} salva e já disponível como ferramenta."
+    if tem_teste and resultado_teste.startswith("(") and extensoes_isoladas():
+        ok, saida = _rodar_extensao_isolada(arquivo, "executar", exemplo, rede=rede, timeout=60)
+        texto += f"\nTeste: {saida}" if ok else f"\nO teste deu erro: {saida}"
+    elif tem_teste and not resultado_teste.startswith("("):
+        texto += f"\nTeste: {resultado_teste}"
+    return texto + "\nO usuário gerencia as extensões com /extensoes."
+
+
+def comando_extensoes(arg):
+    """/extensoes [ligar|desligar|remover|ver NOME]. Devolve texto em markdown simples."""
+    partes = arg.split()
+    acao = sem_acento(partes[0].lower()) if partes else ""
+    nome = partes[1].lower() if len(partes) > 1 else ""
+    dados = ler_extensoes()
+    if acao in ("ligar", "desligar", "remover", "ver", "codigo"):
+        if nome not in dados:
+            raise ValueError(f"não existe extensão chamada {nome or '(sem nome)'}. Veja a lista com /extensoes")
+        arquivo = os.path.join(PASTA_EXTENSOES, nome + ".py")
+        if acao in ("ver", "codigo"):
+            try:
+                with open(arquivo, encoding="utf-8") as f:
+                    return f"**{nome}**: {dados[nome]['descricao']}\n\n```python\n{f.read()}```"
+            except OSError:
+                raise ValueError("o arquivo da extensão sumiu")
+        if acao == "remover":
+            antigas = os.path.join(PASTA_EXTENSOES, "antigas")
+            os.makedirs(antigas, exist_ok=True)
+            if os.path.exists(arquivo):
+                os.replace(arquivo, os.path.join(antigas, f"{nome}-removida-{datetime.datetime.now():%Y%m%d-%H%M%S}.py"))
+            del dados[nome]
+            texto = f"Extensão **{nome}** removida (uma cópia ficou em extensoes/antigas)."
+        else:
+            dados[nome]["ligada"] = acao == "ligar"
+            texto = f"Extensão **{nome}** " + ("ligada." if acao == "ligar" else "desligada.")
+        gravar_extensoes(dados)
+        carregar_extensoes()
+        return texto
+    if acao:
+        raise ValueError("use /extensoes, /extensoes ver NOME, ligar NOME, desligar NOME ou remover NOME")
+    if not dados:
+        return ("Nenhuma extensão ainda. Peça uma função nova ao Lumero (ex.: \"cria uma ferramenta que "
+                "converte temperaturas\") e ele escreve, testa e pede sua permissão antes de salvar.")
+    linhas = ["**Extensões** (funções criadas pelo Lumero)\n"]
+    for n, m in sorted(dados.items()):
+        marcas = [("● ligada" if m.get("ligada", True) else "○ desligada")]
+        if m.get("rede"):
+            marcas.append("internet")
+        if m.get("altera_arquivos"):
+            marcas.append("mexe em arquivos")
+        linhas.append(f"- **{n}** ({', '.join(marcas)}): {m.get('descricao', '')}")
+    linhas.append("\nComandos: `/extensoes ver NOME`, `ligar NOME`, `desligar NOME`, `remover NOME`.")
+    if not extensoes_isoladas():
+        linhas.append("Neste sistema não há sandbox: cada uso de extensão pede a sua permissão.")
+    return "\n".join(linhas)
+
+
+carregar_extensoes()
 
 
 def main():

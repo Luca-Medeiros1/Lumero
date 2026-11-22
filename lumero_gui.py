@@ -152,6 +152,13 @@ def perguntar_na_janela(texto):
 L.Spinner = SpinnerJanela
 L.perguntar = perguntar_na_janela
 
+
+def confirmar_codigo_na_janela(titulo, detalhes, codigo, aviso="", perigo=False):
+    return pedir_confirmacao(titulo, detalhes, perigo=perigo, codigo=codigo, aviso=aviso)
+
+
+L.confirmar_codigo = confirmar_codigo_na_janela
+
 PARAR = threading.Event()
 ESTADO = {"ocupado": False, "resposta": None, "ultimo_sinal": 0.0, "teve_sinal": False,
           "ollama_erro": None, "token": secrets.token_urlsafe(24), "porta": 0}
@@ -180,6 +187,8 @@ def nome_amigavel(nome):
 
 
 def detalhe_da_chamada(args):
+    if "codigo" in args and "nome" in args:  # criar_extensao: o código aparece no cartão
+        return str(args["nome"])
     if len(args) == 1:
         detalhe = str(next(iter(args.values())))
     else:
@@ -593,6 +602,7 @@ COMANDOS_JANELA = [
     ("/pensamento", "mostra o raciocínio da última resposta"),
     ("/modelo", "mostra ou troca o modelo"),
     ("/nome", "mostra ou troca o nome pelo qual o Lumero te chama"),
+    ("/extensoes", "ferramentas que o Lumero criou: ver, ligar, desligar, remover"),
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras"),
     ("/memoria", "o que a IA lembra sobre você"),
@@ -603,7 +613,7 @@ COMANDOS_JANELA = [
     ("/ouvir", "liga/desliga a leitura das respostas em voz alta"),
     ("/tema", "aparência: automático, claro ou escuro"),
 ]
-APELIDOS = {"/limpar": "/nova", "/clear": "/nova", "/help": "/ajuda", "/memória": "/memoria"}
+APELIDOS = {"/extensões": "/extensoes", "/limpar": "/nova", "/clear": "/nova", "/help": "/ajuda", "/memória": "/memoria"}
 TEMAS = {"auto": "automático (igual ao sistema)", "claro": "claro", "escuro": "escuro"}
 _HISTORICO = {"lista": None}
 
@@ -698,7 +708,7 @@ def opcoes_janela(comando):
         return [(c["id"], c["titulo"][:50]) for c in lista_conversas()[:15]]
     if comando == "/modelo":
         return [(m, "instalado") for m in modelos_instalados()]
-    if comando in ("/pensar", "/extras", "/contexto"):
+    if comando in ("/pensar", "/extras", "/contexto", "/extensoes"):
         return L.opcoes_do_comando(comando)
     return []
 
@@ -793,6 +803,8 @@ def comando_janela(texto):
             r["texto"] = f"Modelo trocado para **{arg}**."
         else:
             r["texto"] = f"Modelo: **{L.MODELO}**\n\nInstalados: " + (", ".join(f"`{m}`" for m in modelos_instalados()) or "nenhum")
+    elif cmd == "/extensoes":
+        r["texto"] = L.comando_extensoes(arg)
     elif cmd == "/nome":
         if arg:
             L.trocar_nome(arg)
