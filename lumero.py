@@ -51,8 +51,8 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 26               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.4.0"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 28               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.4.2"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (o instalador escolhe pelo hardware; mude com /contexto)
@@ -5284,7 +5284,9 @@ def prompt_sistema():
            "comportamento), use ver_proprio_codigo para achar o trecho e depois "
            "editar_proprio_codigo, copiando texto_antigo exatamente. Faça mudanças "
            "pequenas e uma de cada vez. " if AUTOEDICAO else "") +
-        ("Se o usuário pedir uma função que nenhuma ferramenta faz e que dá para resolver com um "
+        ("Quando o usuário pedir para criar uma ferramenta, função, comando ou extensão PARA VOCÊ "
+         "(o Lumero), use criar_extensao, nunca criar_arquivo. "
+         "Se o usuário pedir uma função que nenhuma ferramenta faz e que dá para resolver com um "
            "programa curto em Python (cálculos, conversões, ler ou gerar arquivos, consultar um site), "
            "ofereça criar uma ferramenta nova com criar_extensao; depois use a ferramenta criada. "
            if EXTENSOES else "") +
@@ -5901,8 +5903,9 @@ def confirmar_codigo(titulo, detalhes, codigo, aviso="", perigo=False):
 
 
 @ferramenta(
-    "Cria uma ferramenta nova para você mesmo (uma extensão em Python), quando o usuário pede "
-    "algo que nenhuma ferramenta faz. Escreva um código com def executar(...) que recebe os "
+    "Cria uma ferramenta nova para você mesmo (uma extensão em Python). Use SEMPRE que o usuário "
+    "pedir para criar uma ferramenta, função ou extensão para o Lumero, ou algo que nenhuma "
+    "ferramenta faz (não use criar_arquivo para isso). Escreva um código com def executar(...) que recebe os "
     "parâmetros e devolve um texto. Use só a biblioteca padrão do Python. O código roda isolado, "
     "é testado e o usuário aprova antes de salvar. Com o mesmo nome, atualiza a extensão.",
     {"nome": ("string", "Nome da ferramenta em minúsculas com _, ex: converter_temperatura"),
@@ -5972,6 +5975,11 @@ def criar_extensao(nome, descricao, codigo, parametros="", teste="", rede=False,
             detalhes.append("sem sandbox neste sistema: pergunta a cada uso")
         if tem_teste and not resultado_teste.startswith("("):
             detalhes.append("teste: " + resultado_teste.replace("\n", " ")[:200])
+        elif tem_teste and resultado_teste.startswith("(testa depois"):
+            detalhes.append("ao permitir, roda um teste na hora"
+                            + (f" com {json.dumps(exemplo, ensure_ascii=False)[:120]}" if exemplo else "")
+                            + (": ele pode criar ou mudar arquivos" if altera_arquivos else "")
+                            + (" e acessar a internet" if rede else ""))
         if extensoes_isoladas():
             detalhes.append("roda isolado (sandbox), só podendo alterar a sua pasta pessoal")
         aviso = "Vai substituir a versão atual desta extensão (a antiga fica guardada)." if existe else ""
