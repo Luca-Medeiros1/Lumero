@@ -1224,6 +1224,65 @@ def _icone():
     return None
 
 
+def janela_gtk(url):
+    """Janela nativa com o WebKitGTK do sistema (instalação por pacote, sem o pywebview)."""
+    import gi
+    for versao_gtk, modulo, versao in (("4.0", "WebKit", "6.0"), ("3.0", "WebKit2", "4.1"),
+                                       ("3.0", "WebKit2", "4.0")):
+        try:
+            gi.require_version("Gtk", versao_gtk)
+            gi.require_version(modulo, versao)
+            break
+        except (ValueError, ImportError):
+            continue
+    else:
+        raise RuntimeError("sem WebKitGTK")
+    from gi.repository import GLib, Gtk
+    webkit = __import__("gi.repository." + modulo, fromlist=[modulo])
+    GLib.set_prgname("lumero")            # o GNOME liga a janela ao atalho lumero.desktop
+    GLib.set_application_name("Lumero")
+    view = webkit.WebView()
+    try:
+        ajustes = view.get_settings()
+        ajustes.set_javascript_can_access_clipboard(True)
+        ajustes.set_enable_developer_extras(False)
+    except Exception:
+        pass
+    try:
+        from gi.repository import Gdk
+        cor = Gdk.RGBA()
+        cor.parse("#1b1b1a")
+        view.set_background_color(cor)
+    except Exception:
+        pass
+    view.load_uri(url)
+    if versao_gtk == "4.0":
+        app = Gtk.Application()  # sem id: a janela usa o nome do programa ("lumero")
+
+        def ativar(aplicativo):
+            janela = Gtk.ApplicationWindow(application=aplicativo, title="Lumero")
+            janela.set_default_size(1180, 820)
+            janela.set_size_request(520, 560)
+            janela.set_child(view)
+            janela.present()
+        app.connect("activate", ativar)
+        app.run([])
+    else:
+        janela = Gtk.Window(title="Lumero")
+        janela.set_default_size(1180, 820)
+        icone = _icone()
+        if icone:
+            try:
+                janela.set_icon_from_file(icone)
+            except Exception:
+                pass
+        janela.add(view)
+        janela.connect("destroy", lambda *_: Gtk.main_quit())
+        janela.show_all()
+        Gtk.main()
+    return True
+
+
 def abrir_janela(url, forcar_navegador=False):
     """Abre a janela. Devolve True se ela "segura" o programa até ser fechada."""
     if not forcar_navegador:
@@ -1251,8 +1310,13 @@ def abrir_janela(url, forcar_navegador=False):
                 opcoes.pop("icon", None)
                 webview.start(**opcoes)
             return True
-        except Exception as erro:  # sem pywebview ou sem o motor de página: usa o navegador
-            print(f"pywebview indisponível ({erro}); abrindo no navegador")
+        except Exception as erro:  # sem pywebview: tenta a janela do próprio sistema
+            print(f"pywebview indisponível ({erro})")
+            if L.EH_LINUX:
+                try:
+                    return janela_gtk(url)
+                except Exception as erro_gtk:
+                    print(f"WebKitGTK indisponível ({erro_gtk}); abrindo no navegador")
     for navegador in _navegadores_app():
         try:
             comando = navegador.split() if navegador.startswith("flatpak ") else [navegador]

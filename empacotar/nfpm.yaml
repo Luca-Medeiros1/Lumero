@@ -18,11 +18,11 @@ overrides:
     depends: [python3, bubblewrap]
     recommends: [pkexec, curl, zstd, wl-clipboard, xclip, poppler-utils, ffmpeg, 7zip, git,
                  python3-psutil, python3-pil, python3-gi, libnotify-bin, python3-webview,
-                 gir1.2-webkit2-4.1]
+                 gir1.2-webkit-6.0, gir1.2-webkit2-4.1]
   rpm:
     depends: [python3, bubblewrap]
     recommends: [polkit, curl, zstd, wl-clipboard, xclip, poppler-utils, ffmpeg-free, 7zip, git,
-                 python3-psutil, python3-pillow, python3-gobject, libnotify, webkit2gtk4.1]
+                 python3-psutil, python3-pillow, python3-gobject, libnotify, webkitgtk6.0, webkit2gtk4.1]
   archlinux:
     depends: [python, bubblewrap]
 
@@ -76,3 +76,7 @@ contents:
     dst: /usr/share/icons/hicolor/scalable/apps/lumero.svg
   - src: ./assets/lumero.png
     dst: /usr/share/icons/hicolor/256x256/apps/lumero.png
+  - src: ./assets/lumero-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/lumero.png
+  - src: ./assets/lumero-512.png
+    dst: /usr/share/lumero/lumero.png

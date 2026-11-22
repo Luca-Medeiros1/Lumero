@@ -51,8 +51,8 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 30               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.5.0"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 31               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.5.1"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (o instalador escolhe pelo hardware; mude com /contexto)
