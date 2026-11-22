@@ -256,7 +256,20 @@ body.vazio #inicio { display: flex; }
 .pendente span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .pendente button { color: var(--fraco); padding: 0 4px; }
 .dica { max-width: 780px; margin: 8px auto 0; text-align: center; font-size: 12px; color: var(--fraco); }
-#contexto { font-size: 12px; color: var(--fraco); }
+.menu-contexto { position: relative; }
+#contexto { font-size: 12px; color: var(--fraco); padding: 3px 8px; border-radius: 7px; }
+#contexto:hover { background: var(--painel-2); color: var(--texto); }
+#opcoes-contexto { display: none; position: absolute; left: 0; bottom: 34px; z-index: 30; width: 300px; padding: 6px;
+  background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; box-shadow: var(--sombra); }
+#opcoes-contexto.aberto { display: block; }
+#opcoes-contexto .titulo-menu { font-size: 12px; color: var(--fraco); padding: 4px 10px 2px; }
+#opcoes-contexto .explica { font-size: 12px; color: var(--suave); padding: 0 10px 6px; line-height: 1.45; }
+#opcoes-contexto button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border-radius: 8px; text-align: left; font-size: 14px; white-space: nowrap; }
+#opcoes-contexto button:hover { background: var(--painel-2); }
+#opcoes-contexto button small { color: var(--fraco); font-size: 12px; }
+#opcoes-contexto button .certo { margin-left: auto; color: var(--ouro); visibility: hidden; }
+#opcoes-contexto button.escolhido .certo { visibility: visible; }
+#opcoes-contexto .selo { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--ouro) 22%, transparent); color: var(--texto); }
 
 #faixa { display: none; max-width: 780px; margin: 0 auto 10px; padding: 10px 14px; border-radius: 12px; font-size: 14px; border: 1px solid var(--perigo); color: var(--perigo); background: color-mix(in srgb, var(--perigo) 8%, var(--painel)); }
 #faixa.visivel { display: block; }
@@ -338,7 +351,14 @@ body.vazio #inicio { display: flex; }
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg>
         </button>
         <input type="file" id="arquivo" multiple hidden>
-        <span id="contexto"></span>
+        <div class="menu-contexto">
+          <button id="contexto" title="Memória da conversa: clique para mudar"></button>
+          <div id="opcoes-contexto">
+            <div class="titulo-menu">Memória da conversa (contexto)</div>
+            <div class="explica">Quanto da conversa o modelo lembra de uma vez. Maior lembra mais, mas usa mais memória e demora mais para começar a responder.</div>
+            <div id="lista-contexto"></div>
+          </div>
+        </div>
         <span class="espaco"></span>
         <button id="enviar" title="Enviar (Enter)" disabled>
           <svg id="ic-enviar" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -693,6 +713,37 @@ document.querySelectorAll("#opcoes-tema button").forEach(b => b.onclick = async 
 window.addEventListener("focus", () => { if (temaEscolhido === "auto") api("/api/estado").then(e => aplicarTema(e.tema, e.tema_sistema)).catch(() => {}); });
 setInterval(() => { if (temaEscolhido === "auto" && document.hasFocus()) api("/api/estado").then(e => aplicarTema(e.tema, e.tema_sistema)).catch(() => {}); }, 15000);
 
+/* ------------------------------------------------------------------ contexto */
+let ctx = { limite: 8192, recomendado: 0, opcoes: [4096, 8192, 16384, 32768, 65536, 131072], uso: 0 };
+const kTexto = n => (n % 1024 ? (n / 1024).toFixed(1) : n / 1024) + "K";
+function mostrarContexto(e) {
+  if (e.contexto_limite) ctx.limite = e.contexto_limite;
+  if (e.contexto_recomendado !== undefined) ctx.recomendado = e.contexto_recomendado;
+  if (e.contexto_opcoes) ctx.opcoes = e.contexto_opcoes;
+  if (e.contexto !== undefined) ctx.uso = e.contexto || 0;
+  $("#contexto").textContent = `contexto ${kTexto(ctx.limite)}` + (ctx.uso ? ` · ${ctx.uso}% usado` : "");
+}
+function desenharOpcoesContexto() {
+  const l = $("#lista-contexto"); l.innerHTML = "";
+  const valores = [...new Set([...ctx.opcoes, ctx.limite, ...(ctx.recomendado ? [ctx.recomendado] : [])])].sort((a, b) => a - b);
+  for (const v of valores) {
+    const b = el("button" + "", v === ctx.limite ? "escolhido" : "");
+    b.append(el("span", "", kTexto(v)), el("small", "", `${v.toLocaleString("pt-BR")} tokens`));
+    if (v === ctx.recomendado) b.append(el("span", "selo", "recomendado"));
+    else if (ctx.recomendado && v > ctx.recomendado * 2) b.append(el("small", "", "· pode pesar"));
+    b.append(el("span", "certo", "✓"));
+    b.onclick = async ev => {
+      ev.stopPropagation(); $("#opcoes-contexto").classList.remove("aberto");
+      try { const r = await api("/api/config", { contexto: v }); mostrarContexto(r); aviso(`Contexto: ${kTexto(v)}.` + (r.aviso ? " " + r.aviso : "")); }
+      catch (err) { aviso(err.message, true); }
+      entrada.focus();
+    };
+    l.append(b);
+  }
+}
+$("#contexto").onclick = e => { e.stopPropagation(); desenharOpcoesContexto(); $("#opcoes-contexto").classList.toggle("aberto"); };
+document.addEventListener("click", e => { if (!e.target.closest(".menu-contexto")) $("#opcoes-contexto").classList.remove("aberto"); });
+
 async function carregarEstado() {
   const e = await api("/api/estado");
   aplicarTema(e.tema, e.tema_sistema);
@@ -701,7 +752,7 @@ async function carregarEstado() {
   $("#falar").classList.toggle("ligado", e.falar);
   $("#versao").textContent = `Lumero ${e.versao} · ${e.sistema}`;
   if (e.ollama_erro !== null || e.modelos.length) mostrarOllama(e.ollama_erro);
-  $("#contexto").textContent = e.contexto ? `contexto ${e.contexto}%` : "";
+  mostrarContexto(e);
   const hora = new Date().getHours();
   const periodo = hora < 5 ? "Boa noite" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   $("#saudacao").textContent = `${periodo}${e.nome ? ", " + e.nome : ""}! Como posso ajudar?`;
@@ -733,7 +784,7 @@ function conectar() {
       case "fim":
         if (atual) { encerrarTexto(atual); fecharPensamento(atual); if (!atual.corpo.children.length || atual.corpo.children.length === 1) atual.el.remove(); }
         atual = null; mostrarStatus(""); definirOcupado(false);
-        $("#contexto").textContent = ev.contexto ? `contexto ${ev.contexto}%` : "";
+        mostrarContexto({ contexto: ev.contexto });
         conversaAtual = ev.id; carregarLista(); entrada.focus(); pedirSugestoes();
         break;
     }
@@ -759,7 +810,7 @@ async function rodarComando(texto) {
     preencherModelos(e.modelos, e.modelo); $("#pensar").value = e.pensar;
     $("#falar").classList.toggle("ligado", e.falar); aplicarTema(e.tema, e.tema_sistema);
     carregarEstado().catch(() => {});
-    $("#contexto").textContent = e.contexto ? `contexto ${e.contexto}%` : "";
+    mostrarContexto(e);
   }
   rolarFim(true); entrada.focus(); pedirSugestoes();
 }
@@ -925,7 +976,7 @@ caixaMsgs.addEventListener("click", e => {
 $("#nova").onclick = async () => {
   if (ocupado) return aviso("Espere a resposta terminar (ou aperte ■ para parar).", true);
   await api("/api/nova", {}); caixaMsgs.innerHTML = ""; $("#titulo").textContent = "";
-  atualizarVazio(); carregarLista(); $("#contexto").textContent = ""; entrada.focus();
+  atualizarVazio(); carregarLista(); mostrarContexto({ contexto: 0 }); entrada.focus();
 };
 $("#alternar-lateral").onclick = () => document.body.classList.toggle("sem-lateral");
 $("#modelo").onchange = async e => {

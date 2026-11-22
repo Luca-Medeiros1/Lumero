@@ -217,6 +217,11 @@ def instalar(op):
                 valores["NOME_USUARIO"] = nome
             if PACOTE and op.get("modelos"):
                 valores["MODELO"] = op["modelos"][0]
+            if op.get("modelos"):
+                item = next((m for m in HW.analisar(bool(op.get("so_cpu")))["modelos"]
+                             if m["nome"] == op["modelos"][0]), None)
+                if item:
+                    valores["CONTEXTO"] = valores["CONTEXTO_RECOMENDADO"] = item["contexto"]
             if valores:
                 HW.gravar_config(**valores)
     except Exception as erro:

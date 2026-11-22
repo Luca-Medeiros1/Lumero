@@ -50,11 +50,12 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 24               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.2.2"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 25               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.3.0"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
-CONTEXTO = 8192            # memória da conversa em tokens (maior = mais lento no processador)
+CONTEXTO = 8192            # memória da conversa em tokens (o instalador escolhe pelo hardware; mude com /contexto)
+CONTEXTO_RECOMENDADO = 0   # o que o instalador calculou para este computador (0 = não sabe)
 NOME_USUARIO = ""          # como o Lumero chama você (o instalador pergunta; troque com /nome)
 PENSAR = "auto"            # "auto" = decide sozinho; True = sempre pensa; False = nunca
                            # Dica: comece a mensagem com ! para forçar o modo pensar
@@ -149,7 +150,7 @@ OPCOES_CONFIG = {"MODELO", "MODELO_VISAO", "CONTEXTO", "PENSAR", "OLLAMA", "BUSC
                  "SEARXNG_URL", "SEARXNG_MOTORES", "PESQUISA_INTERNET", "GERENCIAR_OLLAMA",
                  "BUSCA_FOTOS", "TEMPERATURA_PAUSA", "TEMPERATURA_RETOMA",
                  "TEMPERATURA_CRITICA", "WHISPER_MODELO", "VOZ_PIPER", "VOZ_SISTEMA",
-                 "LIMITE_MEMORIA", "NOME_USUARIO"}
+                 "LIMITE_MEMORIA", "NOME_USUARIO", "CONTEXTO_RECOMENDADO"}
 
 
 def _carregar_config():
@@ -186,6 +187,58 @@ def gravar_config(**valores):
     os.makedirs(PASTA_DADOS, exist_ok=True)
     with open(ARQ_CONFIG, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=2, ensure_ascii=False)
+
+
+CONTEXTO_MIN, CONTEXTO_MAX = 2048, 262144
+CONTEXTO_OPCOES = [4096, 8192, 16384, 32768, 65536, 131072]
+
+
+def _contexto_valido(valor, padrao=8192):
+    try:
+        valor = int(valor)
+    except (TypeError, ValueError):
+        return padrao
+    return max(CONTEXTO_MIN, min(CONTEXTO_MAX, valor))
+
+
+CONTEXTO = _contexto_valido(CONTEXTO)
+CONTEXTO_RECOMENDADO = _contexto_valido(CONTEXTO_RECOMENDADO, 0) if CONTEXTO_RECOMENDADO else 0
+
+
+def ler_contexto(texto):
+    """'16k', '16384', '16 mil' ou 'recomendado' -> número de tokens (None se não entender)."""
+    t = sem_acento(str(texto or "").strip().lower()).replace(" ", "").replace(".", "")
+    if t in ("recomendado", "padrao", "auto", "automatico"):
+        return CONTEXTO_RECOMENDADO or 8192
+    m = re.fullmatch(r"(\d+)(k|mil)?", t)
+    if not m:
+        return None
+    numero = int(m.group(1)) * (1024 if m.group(2) else 1)
+    if numero < 512:  # "16" quer dizer 16K
+        numero *= 1024
+    return numero
+
+
+def trocar_contexto(texto):
+    """Troca o limite de contexto. Devolve (novo valor, aviso ou "")."""
+    global CONTEXTO
+    novo = ler_contexto(texto)
+    if novo is None:
+        raise ValueError("não entendi o tamanho. Use, por exemplo: 16k, 32768 ou recomendado")
+    novo = _contexto_valido(novo)
+    CONTEXTO = novo
+    gravar_config(CONTEXTO=novo)
+    aviso = ""
+    if CONTEXTO_RECOMENDADO and novo > CONTEXTO_RECOMENDADO * 2:
+        aviso = ("Bem acima do recomendado para este computador: pode faltar memória ou "
+                 "as respostas demorarem para começar.")
+    elif CONTEXTO_RECOMENDADO and novo > CONTEXTO_RECOMENDADO:
+        aviso = "Acima do recomendado: usa mais memória e conversas longas ficam mais lentas."
+    return novo, aviso
+
+
+def contexto_legivel(tokens):
+    return f"{tokens // 1024}K" if tokens % 1024 == 0 else f"{tokens / 1024:.1f}K"
 
 
 def trocar_nome(novo):
@@ -878,7 +931,7 @@ COMANDOS_BARRA = [
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras (ligam sozinhos pelo assunto)"),
     ("/memoria", "o que a IA lembra sobre você"),
-    ("/contexto", "quanto da memória da conversa já foi usado"),
+    ("/contexto", "mostra ou troca o tamanho da memória da conversa"),
     ("/compactar", "resume a conversa para liberar memória"),
     ("/salvar", "salva a conversa atual"),
     ("/conversas", "lista as conversas salvas"),
@@ -944,6 +997,10 @@ def opcoes_do_comando(comando):
             return [(m["name"], tamanho_legivel(m.get("size", 0))) for m in modelos]
         except Exception:
             return []
+    if comando == "/contexto":
+        return [("recomendado", f"o calculado para este computador ({contexto_legivel(CONTEXTO_RECOMENDADO or 8192)})")] + \
+            [(contexto_legivel(c).lower(), f"{c} tokens" + (" · recomendado" if c == CONTEXTO_RECOMENDADO else "")
+              + (" · atual" if c == CONTEXTO else "")) for c in CONTEXTO_OPCOES]
     if comando == "/retomar":
         return [(os.path.basename(arq)[:-5], f"{data} · {titulo[:40]}")
                 for arq, data, titulo in conversas_salvas()[:15]]
@@ -1189,10 +1246,23 @@ def tratar_comando(texto, mensagens):
     elif cmd == "/memoria":
         print(cinza("\n  ⎿  " + ver_memoria().replace("\n", "\n     ")))
     elif cmd == "/contexto":
-        uso = USO_CONTEXTO["tokens"]
-        barra = int(20 * min(1, uso / CONTEXTO))
-        print(cinza(f"\n  ⎿  {'█' * barra}{'░' * (20 - barra)} {uso} de {CONTEXTO} tokens "
-                    f"({100 * uso // CONTEXTO}%) · resume sozinho ao passar de 70%"))
+        if arg:
+            try:
+                novo, aviso = trocar_contexto(arg)
+            except ValueError as erro:
+                print(vermelho(f"\n  ⎿  {erro}"))
+                return None
+            print(cinza(f"\n  ⎿  Contexto: {contexto_legivel(novo)} ({novo} tokens)."))
+            if aviso:
+                print(laranja(f"     {aviso}"))
+        else:
+            uso = USO_CONTEXTO["tokens"]
+            barra = int(20 * min(1, uso / CONTEXTO))
+            rec = f" · recomendado: {contexto_legivel(CONTEXTO_RECOMENDADO)}" if CONTEXTO_RECOMENDADO else ""
+            print(cinza(f"\n  ⎿  {'█' * barra}{'░' * (20 - barra)} {uso} de {CONTEXTO} tokens "
+                        f"({100 * uso // CONTEXTO}%) · resume sozinho ao passar de 70%"))
+            print(cinza(f"     Limite: {contexto_legivel(CONTEXTO)}{rec}. Para mudar: /contexto 16k "
+                        "(ou /contexto recomendado)"))
     elif cmd == "/compactar":
         try:
             if not resumir_conversa(mensagens):

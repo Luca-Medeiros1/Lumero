@@ -75,5 +75,7 @@ with open(arquivo, "w", encoding="utf-8") as f:
     json.dump(dados, f, indent=2, ensure_ascii=False)
 EOF
     echo "    Modelo do Lumero: $PRIMEIRO"
+    CTX="$(python3 "$HW" --gravar-contexto "$PRIMEIRO" $([[ $SO_CPU == 1 ]] && echo --so-cpu))"
+    echo "    Contexto da conversa: $((CTX / 1024))K tokens (mude no Lumero com /contexto)"
 fi
 echo "    Ollama configurado."

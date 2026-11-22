@@ -596,7 +596,7 @@ COMANDOS_JANELA = [
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras"),
     ("/memoria", "o que a IA lembra sobre você"),
-    ("/contexto", "quanto da memória da conversa já foi usado"),
+    ("/contexto", "mostra ou troca o tamanho da memória da conversa"),
     ("/compactar", "resume a conversa para liberar memória"),
     ("/conversas", "lista as conversas salvas"),
     ("/retomar", "abre uma conversa salva (sem nada: a última)"),
@@ -698,7 +698,7 @@ def opcoes_janela(comando):
         return [(c["id"], c["titulo"][:50]) for c in lista_conversas()[:15]]
     if comando == "/modelo":
         return [(m, "instalado") for m in modelos_instalados()]
-    if comando in ("/pensar", "/extras"):
+    if comando in ("/pensar", "/extras", "/contexto"):
         return L.opcoes_do_comando(comando)
     return []
 
@@ -815,8 +815,16 @@ def comando_janela(texto):
     elif cmd == "/memoria":
         r["texto"] = L.ver_memoria()
     elif cmd == "/contexto":
-        uso = L.USO_CONTEXTO["tokens"]
-        r["texto"] = f"Contexto: {uso} de {L.CONTEXTO} tokens ({100 * uso // max(1, L.CONTEXTO)}%). A conversa é resumida sozinha ao passar de 70%."
+        if arg:
+            novo, aviso = L.trocar_contexto(arg)
+            r["texto"] = f"Contexto: **{L.contexto_legivel(novo)}** ({novo} tokens)." + (f"\n\n⚠️ {aviso}" if aviso else "")
+        else:
+            uso = L.USO_CONTEXTO["tokens"]
+            rec = f" O recomendado para este computador é **{L.contexto_legivel(L.CONTEXTO_RECOMENDADO)}**." if L.CONTEXTO_RECOMENDADO else ""
+            r["texto"] = (f"Contexto: {uso} de {L.CONTEXTO} tokens usados ({100 * uso // max(1, L.CONTEXTO)}%). "
+                          f"Limite: **{L.contexto_legivel(L.CONTEXTO)}**.{rec} A conversa é resumida sozinha ao passar de 70%.\n\n"
+                          "Para mudar: `/contexto 16k`, `/contexto 32k` ou `/contexto recomendado` "
+                          "(ou clique no contexto, embaixo da caixa de texto).")
     elif cmd == "/compactar":
         if ESTADO["ocupado"]:
             raise ValueError("espere a resposta terminar")
@@ -884,7 +892,9 @@ def estado():
             "ollama_erro": ESTADO["ollama_erro"], "conversa": conversa_atual().id,
             "titulo": conversa_atual().titulo, "so": L.SO,
             "contexto": min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO))),
-            "tema": tema_escolhido(), "nome": L.NOME_USUARIO, "tema_sistema": tema_do_sistema(),
+            "tema": tema_escolhido(), "nome": L.NOME_USUARIO,
+            "contexto_limite": L.CONTEXTO, "contexto_recomendado": L.CONTEXTO_RECOMENDADO,
+            "contexto_opcoes": L.CONTEXTO_OPCOES, "tema_sistema": tema_do_sistema(),
             "proxima": L.CONTEXTO_SUGESTAO["proxima"]}
 
 
@@ -1101,6 +1111,11 @@ class Pedido(http.server.BaseHTTPRequestHandler):
         if "pensar" in dados:
             L.PENSAR = {"sempre": True, "nunca": False}.get(dados["pensar"], "auto")
             gravar_config(PENSAR=L.PENSAR)
+        if "contexto" in dados:
+            novo, aviso = L.trocar_contexto(str(dados["contexto"]))
+            resultado = estado()
+            resultado["aviso"] = aviso
+            return resultado
         if "tema" in dados:
             if dados["tema"] not in TEMAS:
                 raise ValueError("tema inválido")

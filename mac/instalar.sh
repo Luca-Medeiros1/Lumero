@@ -254,6 +254,8 @@ with open(arquivo, "w", encoding="utf-8") as f:
     json.dump(dados, f, indent=2, ensure_ascii=False)
 EOF
     echo "    Modelo do Lumero: $padrao"
+    CTX="$("$PY" "$RAIZ/instalador/hardware.py" --gravar-contexto "$padrao")"
+    echo "    Contexto da conversa: $((CTX / 1024))K tokens (mude no Lumero com /contexto)"
 fi
 echo "    O Ollama só liga quando o Lumero abre (e só escuta este Mac: 127.0.0.1)."
 echo "    Para baixar outro modelo depois: ollama serve & ollama pull NOME"

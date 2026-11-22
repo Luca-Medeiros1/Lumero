@@ -328,7 +328,11 @@ foreach ($modelo in $lista) {
     & $Ollama pull $modelo 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -eq 0) { if (-not $padrao) { $padrao = $modelo } } else { Aviso "não consegui baixar $modelo" }
 }
-if ($padrao) { Gravar-Config 'MODELO' $padrao; Write-Host "    Modelo do Lumero: $padrao" }
+if ($padrao) {
+    Gravar-Config 'MODELO' $padrao; Write-Host "    Modelo do Lumero: $padrao"
+    $argsCtx = @($hardware, '--gravar-contexto', $padrao); if ($Respostas.socpu) { $argsCtx += '--so-cpu' }
+    try { $ctx = [int]((& $Py @argsCtx | Out-String).Trim()); Write-Host "    Contexto da conversa: $([int]($ctx / 1024))K tokens (mude no Lumero com /contexto)" } catch {}
+}
 if ($servidor) { Stop-Process -Id $servidor.Id -Force -ErrorAction SilentlyContinue }
 
 # ----------------------------------------------------------------------------- 6

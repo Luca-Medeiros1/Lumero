@@ -114,6 +114,10 @@ passo "4/4 Lumero"
 PRIMEIRO="$(echo $MODELOS | awk '{print $1}')"
 bash "$RAIZ/linux/usuario.sh" --modelo "$PRIMEIRO" --voz "$VOZ" | grep -v '^##'
 [[ -n "$NOME" ]] && python3 "$RAIZ/instalador/hardware.py" --gravar-nome "$NOME" >/dev/null
+if [[ -n "$PRIMEIRO" ]]; then
+    CTX="$(python3 "$RAIZ/instalador/hardware.py" --gravar-contexto "$PRIMEIRO" $([[ $SO_CPU == 1 ]] && echo --so-cpu))"
+    echo "    Contexto da conversa: $((CTX / 1024))K tokens (mude no Lumero com /contexto)"
+fi
 
 echo
 printf '\033[1;32m✓ Lumero instalado%s!\033[0m\n' "${NOME:+, $NOME}"

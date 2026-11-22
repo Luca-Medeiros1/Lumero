@@ -72,6 +72,12 @@ estimada:
 
 O modelo recomendado é o mais esperto que ainda responde numa velocidade boa nesse computador.
 
+O instalador também escolhe o **contexto** (quanto da conversa o modelo lembra de uma vez) pela
+memória que sobra depois do modelo: 8K a 32K no processador, até 64K numa placa de vídeo e até
+128K num Mac com memória de sobra. Para mudar depois, clique em "contexto" embaixo da caixa de
+texto ou use `/contexto 32k` (`/contexto recomendado` volta ao valor calculado). Contexto maior
+usa mais memória e, no processador, demora mais para começar a responder em conversas longas.
+
 Por padrão, o Ollama usa a placa de vídeo quando ela é compatível (NVIDIA, AMD ou Apple). Se a
 placa tiver pouca memória (como uma MX150 de 2 GB), o instalador recomenda **só o
 processador**: a diferença de velocidade é pequena e o notebook esquenta menos. Dá para

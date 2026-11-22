@@ -25,22 +25,51 @@ GB = 1024 ** 3
 # rápidos para o tamanho.
 # ----------------------------------------------------------------------------
 MODELOS = [
-    {"nome": "qwen3.5:0.8b", "rotulo": "Qwen 3.5 · 0,8B", "tamanho_gb": 1.0, "ativo_gb": 0.75,
+    {"nome": "qwen3.5:0.8b", "kv_k": 0.008, "rotulo": "Qwen 3.5 · 0,8B", "tamanho_gb": 1.0, "ativo_gb": 0.75,
      "qualidade": 1, "descricao": "Mínimo: para computadores bem fracos. Responde rápido, mas erra bastante."},
-    {"nome": "qwen3.5:2b", "rotulo": "Qwen 3.5 · 2B", "tamanho_gb": 2.7, "ativo_gb": 2.2,
+    {"nome": "qwen3.5:2b", "kv_k": 0.012, "rotulo": "Qwen 3.5 · 2B", "tamanho_gb": 2.7, "ativo_gb": 2.2,
      "qualidade": 2, "descricao": "Leve: bom para tarefas simples e perguntas rápidas."},
-    {"nome": "qwen3.5:4b", "rotulo": "Qwen 3.5 · 4B", "tamanho_gb": 3.4, "ativo_gb": 2.9,
+    {"nome": "qwen3.5:4b", "kv_k": 0.02, "rotulo": "Qwen 3.5 · 4B", "tamanho_gb": 3.4, "ativo_gb": 2.9,
      "qualidade": 3, "descricao": "Equilibrado: bom em quase tudo, usa bem as ferramentas."},
-    {"nome": "qwen3.5:9b", "rotulo": "Qwen 3.5 · 9B", "tamanho_gb": 6.6, "ativo_gb": 5.8,
+    {"nome": "qwen3.5:9b", "kv_k": 0.03, "rotulo": "Qwen 3.5 · 9B", "tamanho_gb": 6.6, "ativo_gb": 5.8,
      "qualidade": 4, "descricao": "Esperto: bem melhor em raciocínio, código e tarefas com vários passos."},
-    {"nome": "qwen3.5:27b", "rotulo": "Qwen 3.5 · 27B", "tamanho_gb": 17.0, "ativo_gb": 15.5,
+    {"nome": "qwen3.5:27b", "kv_k": 0.06, "rotulo": "Qwen 3.5 · 27B", "tamanho_gb": 17.0, "ativo_gb": 15.5,
      "qualidade": 5, "descricao": "Muito esperto: próximo dos modelos da internet. Precisa de placa de vídeo forte."},
-    {"nome": "qwen3.5:35b", "rotulo": "Qwen 3.5 · 35B (MoE)", "tamanho_gb": 24.0, "ativo_gb": 2.2,
+    {"nome": "qwen3.5:35b", "kv_k": 0.03, "rotulo": "Qwen 3.5 · 35B (MoE)", "tamanho_gb": 24.0, "ativo_gb": 2.2,
      "qualidade": 5, "descricao": "Muito esperto e rápido para o tamanho: só ~3B trabalham de cada vez. "
                                    "Precisa de bastante memória."},
-    {"nome": "qwen3.5:122b", "rotulo": "Qwen 3.5 · 122B (MoE)", "tamanho_gb": 81.0, "ativo_gb": 7.0,
+    {"nome": "qwen3.5:122b", "kv_k": 0.06, "rotulo": "Qwen 3.5 · 122B (MoE)", "tamanho_gb": 81.0, "ativo_gb": 7.0,
      "qualidade": 6, "descricao": "Topo de linha: para estações de trabalho com muita memória."},
 ]
+
+CONTEXTOS = [4096, 8192, 16384, 32768, 65536, 131072]
+CONTEXTO_PADRAO = 8192
+
+
+def contexto_legivel(tokens):
+    return f"{tokens // 1024}K"
+
+
+def contexto_para(m, onde, sobra_gb, tokens_s, apple=False, memoria_grande=False):
+    """Maior contexto que cabe na memória que sobra, sem deixar o modelo lento demais.
+    `sobra_gb` é a memória livre depois do modelo com 8K de contexto."""
+    if onde == "nao_cabe":
+        return CONTEXTO_PADRAO
+    if onde == "cpu":  # no processador, conversa longa demora para começar a responder
+        teto = 32768 if tokens_s >= 15 else 16384 if tokens_s >= 5 else 8192
+    elif onde == "gpu_cpu":
+        teto = 16384
+    else:
+        teto = 131072 if (apple or memoria_grande) else 65536
+    escolhido = 4096 if sobra_gb < 0.3 else CONTEXTO_PADRAO
+    for ctx in CONTEXTOS:
+        if ctx <= CONTEXTO_PADRAO or ctx > teto:
+            continue
+        extra = m["kv_k"] * 1.5 * (ctx - CONTEXTO_PADRAO) / 1024
+        if extra <= sobra_gb * 0.8:
+            escolhido = ctx
+    return escolhido
+
 
 VELOCIDADES = [(15, "rapido", "rápido"), (6, "bom", "bom"), (2.5, "lento", "lento"),
                (0, "muito_lento", "muito lento")]
@@ -425,6 +454,16 @@ def analisar(forcar_cpu=False):
                 break
         if onde == "nao_cabe":
             item["velocidade"], item["velocidade_texto"] = "nao_cabe", "não cabe na memória"
+        if onde == "gpu":
+            sobra = usar["vram_gb"] - precisa
+        elif onde == "gpu_cpu":
+            sobra = usar["vram_gb"] + ram_livre - precisa
+        else:
+            sobra = ram_livre - precisa
+        item["contexto"] = contexto_para(m, onde, sobra, vel,
+                                         apple=bool(usar and usar["fabricante"] == "apple"),
+                                         memoria_grande=bool(usar and usar["vram_gb"] >= 40))
+        item["contexto_texto"] = contexto_legivel(item["contexto"])
         modelos.append(item)
 
     # recomendado: o melhor modelo que ainda responde numa velocidade boa
@@ -547,6 +586,13 @@ if __name__ == "__main__":
     if "--nome" in sys.argv:
         print(nome_sugerido())
         sys.exit(0)
+    if "--gravar-contexto" in sys.argv:  # --gravar-contexto MODELO [--so-cpu]
+        nome = sys.argv[sys.argv.index("--gravar-contexto") + 1] if sys.argv[-1] != "--gravar-contexto" else ""
+        item = next((m for m in analisar("--so-cpu" in sys.argv)["modelos"] if m["nome"] == nome), None)
+        ctx = item["contexto"] if item else CONTEXTO_PADRAO
+        gravar_config(CONTEXTO=ctx, CONTEXTO_RECOMENDADO=ctx)
+        print(ctx)
+        sys.exit(0)
     if "--gravar-nome" in sys.argv:
         nome = limpar_nome(sys.argv[sys.argv.index("--gravar-nome") + 1] if sys.argv[-1] != "--gravar-nome" else "")
         if nome:
@@ -566,4 +612,4 @@ if __name__ == "__main__":
             print(f"    [{i}] {m['nome']:<14} {m['tamanho_gb']:>5.1f} GB  não cabe na memória deste computador")
         else:
             print(f"    [{i}] {m['nome']:<14} {m['tamanho_gb']:>5.1f} GB  {ONDE_TEXTO[m['onde']]}, "
-                  f"{m['velocidade_texto']}{marca}")
+                  f"{m['velocidade_texto']}, contexto {m['contexto_texto']}{marca}")

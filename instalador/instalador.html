@@ -191,7 +191,7 @@ summary { cursor: pointer; padding: 10px 14px; color: var(--suave); font-size: 1
   <!-- 3. modelos -->
   <section class="pagina" id="p3">
     <h2>Modelos de IA</h2>
-    <p class="sub">Escolha um ou mais. Modelos maiores são mais espertos, mas mais pesados. Dá para trocar e baixar outros depois.</p>
+    <p class="sub">Escolha um ou mais. Modelos maiores são mais espertos, mas mais pesados. O contexto é quanto da conversa o modelo lembra de uma vez. Tudo isso dá para trocar depois.</p>
     <div id="modelos"></div>
     <div class="resumo-download" id="resumo-download"></div>
   </section>
@@ -342,6 +342,7 @@ function desenharModelos() {
     const et = el("div", "etiquetas");
     et.append(el("span", "etiqueta " + m.onde, ONDE[m.onde] + (m.fracao_gpu ? ` · ${m.fracao_gpu}% na placa` : "")));
     et.append(el("span", "etiqueta", "precisa de ~" + m.precisa_gb.toFixed(1).replace(".", ",") + " GB de memória"));
+    if (cabe) { const c = el("span", "etiqueta", "contexto " + m.contexto_texto); c.title = "Quanto da conversa o modelo consegue lembrar de uma vez (dá para mudar depois no Lumero)"; et.append(c); }
     meio.append(et);
     const lado = el("div", "lado");
     lado.append(el("div", "tamanho", m.tamanho_gb.toFixed(1).replace(".", ",") + " GB"));
