@@ -230,6 +230,27 @@ def instalar(op):
     evento("fim", sucesso=sucesso, mensagem=mensagem)
 
 
+def _nome_para_o_icone():
+    """Nome da janela que o GNOME usa para achar o ícone na dock.
+    Com o Lumero já no menu (pacote), usa o atalho dele; senão cria um atalho
+    escondido só para o instalador ter o ícone certo."""
+    casa = os.path.expanduser("~")
+    apps = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(casa, ".local", "share"), "applications")
+    if any(os.path.exists(os.path.join(d, "lumero.desktop"))
+           for d in (apps, "/usr/share/applications", "/usr/local/share/applications")):
+        return "lumero"
+    icone = os.path.join(RAIZ, "assets", "lumero.svg")
+    try:
+        os.makedirs(apps, exist_ok=True)
+        with open(os.path.join(apps, "lumero-instalador.desktop"), "w", encoding="utf-8") as f:
+            f.write("[Desktop Entry]\nType=Application\nName=Instalador do Lumero\n"
+                    f"Icon={icone}\nExec=true\nNoDisplay=true\nTerminal=false\n"
+                    "StartupWMClass=lumero-instalador\n")
+    except OSError:
+        pass
+    return "lumero-instalador"
+
+
 def abrir_lumero():
     home = os.path.expanduser("~")
     if SO == "linux":
@@ -386,7 +407,7 @@ def janela_gtk(url):
         raise RuntimeError("sem WebKitGTK")
     from gi.repository import GLib, Gtk
     webkit = __import__("gi.repository." + modulo, fromlist=[modulo])
-    GLib.set_prgname("lumero-instalador")
+    GLib.set_prgname(_nome_para_o_icone())
     GLib.set_application_name("Instalador do Lumero")
 
     def pode_fechar(*_):
@@ -399,7 +420,7 @@ def janela_gtk(url):
     view.load_uri(url)
     icone = os.path.join(RAIZ, "assets", "lumero.svg")
     if versao_gtk == "4.0":
-        app = Gtk.Application(application_id="com.lumero.Instalador")
+        app = Gtk.Application()  # sem id: a janela usa o nome do programa, igual ao atalho
 
         def ativar(aplicativo):
             janela = Gtk.ApplicationWindow(application=aplicativo, title="Instalador do Lumero")

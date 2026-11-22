@@ -26,6 +26,10 @@ overrides:
   archlinux:
     depends: [python, bubblewrap]
 
+scripts:
+  postinstall: ./empacotar/linux/pos-instalar.sh
+  postremove: ./empacotar/linux/pos-instalar.sh
+
 contents:
   - src: ./lumero.py
     dst: /usr/share/lumero/lumero.py

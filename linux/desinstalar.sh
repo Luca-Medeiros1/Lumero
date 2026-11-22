@@ -16,7 +16,7 @@ systemctl --user disable --now 'lembrete-*.timer' 2>/dev/null
 rm -f "$HOME"/.config/systemd/user/lembrete-*
 systemctl --user daemon-reload 2>/dev/null
 pkill -f "$DADOS/lumero_gui.py" 2>/dev/null
-rm -f "$BIN/lumero" "$BIN/lumero-janela" "$BIN/lumero-gui" "$APPS/lumero.desktop" \
+rm -f "$BIN/lumero" "$BIN/lumero-janela" "$BIN/lumero-gui" "$APPS/lumero.desktop" "$APPS/lumero-instalador.desktop" \
       "$ICONES/scalable/apps/lumero.svg" "$ICONES/256x256/apps/lumero.png"
 rm -rf "$DADOS/venv" "$DADOS/voz/piper-venv"
 rm -f "$DADOS/lumero.py" "$DADOS/lumero.svg" "$DADOS/lumero_gui.py" "$DADOS/lumero_gui.html" "$DADOS/gui.json"
