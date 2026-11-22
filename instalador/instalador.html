@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instalador do Lumero</title>
+<link rel="icon" href="/icone.svg">
+<style>
+:root {
+  --fundo: #1b1b1a; --painel: #232322; --painel-2: #2b2b29; --borda: #36352f; --texto: #ecebe6;
+  --suave: #a3a199; --fraco: #75736c; --ouro: #e9b528; --ouro-escuro: #c9951a; --ouro-texto: #1d1606;
+  --ok: #6cbf73; --perigo: #e5604f; --azul: #6aa5f0; --roxo: #b48cf2; --sombra: 0 10px 30px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --fundo: #faf9f6; --painel: #ffffff; --painel-2: #f4f2ed; --borda: #e2dfd7; --texto: #1f1e1b;
+    --suave: #66645d; --fraco: #9a978e; --ouro: #e0a91c; --ouro-escuro: #b8860b; --ok: #3d8b45;
+    --perigo: #c8412f; --azul: #2f6fc4; --roxo: #7a4cc2; --sombra: 0 10px 30px rgba(60,50,20,.10);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--fundo); color: var(--texto); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+
+/* cabeçalho com as etapas */
+header { flex: none; display: flex; align-items: center; gap: 14px; padding: 16px 28px; border-bottom: 1px solid var(--borda); }
+header img { width: 34px; height: 34px; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; flex: 1; }
+.etapas { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--fraco); }
+.etapas span { display: flex; align-items: center; gap: 6px; }
+.etapas span::before { content: attr(data-n); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--borda); font-size: 12px; }
+.etapas span.atual { color: var(--texto); font-weight: 600; }
+.etapas span.atual::before { background: var(--ouro); color: var(--ouro-texto); border-color: var(--ouro); }
+.etapas span.feita::before { content: "✓"; background: var(--painel-2); color: var(--ok); }
+.etapas i { width: 18px; height: 1px; background: var(--borda); }
+
+main { flex: 1; overflow-y: auto; }
+.pagina { display: none; max-width: 860px; margin: 0 auto; padding: 30px 28px 20px; }
+.pagina.ativa { display: block; animation: entrar .25s ease; }
+@keyframes entrar { from { opacity: 0; transform: translateY(6px); } }
+h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+.sub { color: var(--suave); margin: 0 0 22px; }
+footer { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 28px; border-top: 1px solid var(--borda); }
+footer .info { color: var(--fraco); font-size: 13px; flex: 1; }
+.botao { padding: 9px 20px; border-radius: 10px; font-weight: 600; border: 1px solid var(--borda); background: var(--painel); }
+.botao:hover { border-color: var(--fraco); }
+.botao.principal { background: var(--ouro); color: var(--ouro-texto); border-color: var(--ouro); }
+.botao.principal:hover { background: var(--ouro-escuro); }
+.botao:disabled { opacity: .45; cursor: default; }
+
+/* boas-vindas */
+.boas-vindas { text-align: center; padding-top: 30px; }
+.boas-vindas img { width: 96px; height: 96px; filter: drop-shadow(0 8px 24px rgba(233,181,40,.25)); }
+.boas-vindas h2 { font-size: 30px; margin-top: 14px; }
+.lista-recursos { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; text-align: left; margin: 26px auto 0; max-width: 680px; }
+.recurso { padding: 12px 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); font-size: 14px; }
+.recurso b { display: block; margin-bottom: 2px; }
+.recurso small { color: var(--suave); }
+
+/* análise */
+.cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cartao { padding: 14px 16px; border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); }
+.cartao .rot { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--fraco); margin-bottom: 4px; }
+.cartao .val { font-weight: 600; }
+.cartao .det { color: var(--suave); font-size: 13px; }
+.veredito { display: flex; gap: 14px; align-items: flex-start; margin: 18px 0; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--borda); background: var(--painel); }
+.veredito .ic { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 22px; }
+.veredito.gpu .ic { background: color-mix(in srgb, var(--ok) 18%, transparent); }
+.veredito.cpu .ic { background: color-mix(in srgb, var(--azul) 18%, transparent); }
+.veredito h3 { margin: 0 0 4px; font-size: 16px; }
+.veredito p { margin: 0; color: var(--suave); font-size: 14px; }
+.escolha { display: grid; gap: 8px; margin-top: 8px; }
+.opcao { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); cursor: pointer; }
+.opcao:hover { border-color: var(--fraco); }
+.opcao.marcada { border-color: var(--ouro); background: color-mix(in srgb, var(--ouro) 7%, var(--painel)); }
+.opcao input { margin-top: 4px; accent-color: var(--ouro); width: 16px; height: 16px; }
+.opcao b { display: block; }
+.opcao small { color: var(--suave); }
+.titulo-sec { font-weight: 650; margin: 22px 0 8px; }
+
+/* modelos */
+.modelo { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid var(--borda); border-radius: 14px; background: var(--painel); margin-bottom: 8px; cursor: pointer; }
+.modelo:hover { border-color: var(--fraco); }
+.modelo.marcado { border-color: var(--ouro); background: color-mix(in srgb, var(--ouro) 6%, var(--painel)); }
+.modelo.bloqueado { opacity: .5; cursor: default; }
+.modelo.bloqueado:hover { border-color: var(--borda); }
+.modelo input { accent-color: var(--ouro); width: 18px; height: 18px; }
+.modelo .nome { font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.modelo .desc { color: var(--suave); font-size: 13.5px; margin: 2px 0 6px; }
+.etiquetas { display: flex; gap: 6px; flex-wrap: wrap; }
+.etiqueta { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--borda); color: var(--suave); white-space: nowrap; }
+.etiqueta.gpu { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.etiqueta.gpu_cpu { color: var(--roxo); border-color: color-mix(in srgb, var(--roxo) 45%, transparent); }
+.etiqueta.cpu { color: var(--azul); border-color: color-mix(in srgb, var(--azul) 45%, transparent); }
+.etiqueta.nao_cabe { color: var(--perigo); border-color: color-mix(in srgb, var(--perigo) 45%, transparent); }
+.chip-rec { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--ouro); color: var(--ouro-texto); }
+.lado { text-align: right; min-width: 150px; }
+.tamanho { font-weight: 600; }
+.barras { display: inline-flex; gap: 3px; margin-top: 6px; }
+.barras i { width: 14px; height: 6px; border-radius: 3px; background: var(--borda); }
+.barras.v1 i:nth-child(-n+1), .barras.v2 i:nth-child(-n+2), .barras.v3 i:nth-child(-n+3), .barras.v4 i:nth-child(-n+4) { background: var(--ouro); }
+.vel { font-size: 12px; color: var(--suave); }
+.estrelas { color: var(--ouro); letter-spacing: 1px; font-size: 12px; }
+.resumo-download { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--painel-2); font-size: 14px; color: var(--suave); }
+.resumo-download.alerta { color: var(--perigo); }
+
+/* opções */
+.chave { display: flex; gap: 14px; align-items: center; padding: 14px 16px; border: 1px solid var(--borda); border-radius: 14px; background: var(--painel); margin-bottom: 8px; cursor: pointer; }
+.chave .txt { flex: 1; }
+.chave b { display: block; }
+.chave small { color: var(--suave); }
+.interruptor { width: 42px; height: 24px; border-radius: 999px; background: var(--borda); position: relative; flex: none; transition: background .15s; }
+.interruptor::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.chave.ligada .interruptor { background: var(--ouro); }
+.chave.ligada .interruptor::after { left: 21px; }
+
+/* instalação */
+.passos { list-style: none; padding: 0; margin: 0 0 16px; }
+.passos li { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--borda); color: var(--fraco); }
+.passos li .est { width: 22px; height: 22px; display: grid; place-items: center; flex: none; }
+.passos li.rodando { color: var(--texto); font-weight: 600; }
+.passos li.feito { color: var(--texto); }
+.passos li.feito .est { color: var(--ok); }
+.passos li.erro .est { color: var(--perigo); }
+.passos li .extra { margin-left: auto; font-size: 13px; color: var(--suave); font-weight: 400; }
+.girando { width: 16px; height: 16px; border: 2px solid var(--borda); border-top-color: var(--ouro); border-radius: 50%; animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.barra { height: 8px; border-radius: 99px; background: var(--painel-2); overflow: hidden; margin: 6px 0 4px; }
+.barra div { height: 100%; width: 0; background: var(--ouro); transition: width .3s; }
+#progresso-modelo { display: none; padding: 12px 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); margin-bottom: 14px; }
+#progresso-modelo .linha { display: flex; justify-content: space-between; font-size: 14px; }
+.aviso-senha { display: none; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--ouro-escuro); background: color-mix(in srgb, var(--ouro) 8%, var(--painel)); margin-bottom: 14px; font-size: 14px; }
+details { border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); }
+summary { cursor: pointer; padding: 10px 14px; color: var(--suave); font-size: 14px; }
+#log { margin: 0; padding: 0 14px 12px; max-height: 260px; overflow-y: auto; font: 12.5px/1.5 ui-monospace, "SF Mono", Consolas, monospace; color: var(--suave); white-space: pre-wrap; word-break: break-word; }
+#log .erro { color: var(--perigo); }
+.final { text-align: center; padding-top: 34px; }
+.final .grande { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 14px; font-size: 38px; }
+.final.ok .grande { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.final.falhou .grande { background: color-mix(in srgb, var(--perigo) 18%, transparent); color: var(--perigo); }
+.final p { color: var(--suave); max-width: 560px; margin: 0 auto 8px; }
+.final .botoes { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+.carregando { display: flex; align-items: center; gap: 10px; color: var(--suave); padding: 30px 0; }
+@media (max-width: 720px) { .etapas { display: none; } .lista-recursos { grid-template-columns: 1fr; } .modelo { grid-template-columns: 22px 1fr; } .lado { grid-column: 2; text-align: left; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/icone.svg" alt="">
+  <h1>Instalador do Lumero</h1>
+  <div class="etapas" id="etapas">
+    <span data-n="1">Início</span><i></i><span data-n="2">Computador</span><i></i>
+    <span data-n="3">Modelos</span><i></i><span data-n="4">Opções</span><i></i><span data-n="5">Instalação</span>
+  </div>
+</header>
+
+<main>
+  <!-- 1. boas-vindas -->
+  <section class="pagina boas-vindas" id="p1">
+    <img src="/icone.svg" alt="">
+    <h2>Bem-vindo ao Lumero</h2>
+    <p class="sub">Uma IA que roda no seu computador: conversa, pesquisa, acha arquivos e faz tarefas para você.</p>
+    <div class="lista-recursos">
+      <div class="recurso"><b>🔒 Local e privada</b><small>O modelo roda aqui; suas conversas não vão para a internet.</small></div>
+      <div class="recurso"><b>🧠 Feita para o seu computador</b><small>Vamos analisar o hardware e indicar os modelos certos.</small></div>
+      <div class="recurso"><b>🛠️ Faz coisas de verdade</b><small>Abre programas, organiza arquivos, cria lembretes e mais.</small></div>
+      <div class="recurso"><b>✋ Você no controle</b><small>Ações importantes sempre pedem a sua permissão.</small></div>
+    </div>
+    <p class="sub" style="margin-top:22px;font-size:13px">A instalação precisa de internet para baixar o Ollama e os modelos.</p>
+  </section>
+
+  <!-- 2. computador -->
+  <section class="pagina" id="p2">
+    <h2>Seu computador</h2>
+    <p class="sub">Com isso dá para saber quais modelos cabem e onde eles rodam.</p>
+    <div id="analise"><div class="carregando"><span class="girando"></span> Analisando o computador…</div></div>
+  </section>
+
+  <!-- 3. modelos -->
+  <section class="pagina" id="p3">
+    <h2>Modelos de IA</h2>
+    <p class="sub">Escolha um ou mais. Modelos maiores são mais espertos, mas mais pesados. Dá para trocar e baixar outros depois.</p>
+    <div id="modelos"></div>
+    <div class="resumo-download" id="resumo-download"></div>
+  </section>
+
+  <!-- 4. opções -->
+  <section class="pagina" id="p4">
+    <h2>Opções</h2>
+    <p class="sub">Tudo pode ser mudado depois.</p>
+    <div id="opcoes"></div>
+  </section>
+
+  <!-- 5. instalação -->
+  <section class="pagina" id="p5">
+    <h2 id="titulo-instalacao">Instalando…</h2>
+    <p class="sub" id="sub-instalacao">Pode deixar rodando: o download dos modelos é a parte mais demorada.</p>
+    <div class="aviso-senha" id="aviso-senha">🔐 O sistema vai pedir a sua senha numa janela separada para instalar os programas e configurar o Ollama.</div>
+    <ul class="passos" id="passos"></ul>
+    <div id="progresso-modelo">
+      <div class="linha"><span id="modelo-atual">Baixando…</span><span id="modelo-pct">0%</span></div>
+      <div class="barra"><div id="modelo-barra"></div></div>
+    </div>
+    <details id="detalhes"><summary>Ver detalhes</summary><pre id="log"></pre></details>
+  </section>
+
+  <!-- 6. final -->
+  <section class="pagina final" id="p6">
+    <div class="grande" id="final-icone">✓</div>
+    <h2 id="final-titulo">O Lumero está pronto!</h2>
+    <p id="final-texto"></p>
+    <div class="botoes" id="final-botoes"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="info" id="rodape"></div>
+  <button class="botao" id="voltar">Voltar</button>
+  <button class="botao principal" id="avancar">Começar</button>
+</footer>
+
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+const $ = s => document.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+async function api(caminho, dados) {
+  const o = { headers: { "X-Token": TOKEN } };
+  if (dados !== undefined) { o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(dados); }
+  const r = await fetch(caminho, o);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || r.status);
+  return j;
+}
+
+const estado = { pagina: 1, info: null, analise: null, soCpu: false, eco: false, modelos: new Set(),
+                 opcoes: { bloquear: true, voz: false, extras: true, atalho_area: false, manter_autostart: false } };
+const ONDE = { gpu: "Placa de vídeo", gpu_cpu: "Placa + processador", cpu: "Processador", nao_cabe: "Não cabe na memória" };
+
+function irPara(n) {
+  estado.pagina = n;
+  document.querySelectorAll(".pagina").forEach(p => p.classList.remove("ativa"));
+  $("#p" + n).classList.add("ativa");
+  document.querySelectorAll("#etapas span").forEach((s, i) => {
+    s.className = i + 1 < Math.min(n, 5) ? "feita" : i + 1 === Math.min(n, 5) ? "atual" : "";
+  });
+  const voltar = $("#voltar"), avancar = $("#avancar");
+  voltar.style.visibility = n > 1 && n < 5 ? "visible" : "hidden";
+  avancar.style.display = n >= 5 ? "none" : "";
+  avancar.textContent = n === 1 ? "Começar" : n === 4 ? "Instalar" : "Próximo";
+  avancar.disabled = n === 2 && !estado.analise;
+  $("#rodape").textContent = n === 1 && estado.info ? `Lumero ${estado.info.versao}` : "";
+  if (n === 3) desenharModelos();
+  if (n === 4) desenharOpcoes();
+  $("main").scrollTop = 0;
+}
+
+/* ------------------------------------------------------------------ análise */
+async function analisar() {
+  estado.analise = null;
+  $("#analise").innerHTML = '<div class="carregando"><span class="girando"></span> Analisando o computador…</div>';
+  if (estado.pagina === 2) $("#avancar").disabled = true;
+  estado.analise = await api("/api/analise?so_cpu=" + (estado.soCpu ? "1" : "0"));
+  desenharAnalise();
+  if (estado.pagina === 2) $("#avancar").disabled = false;
+}
+function desenharAnalise() {
+  const a = estado.analise, c = $("#analise"); c.innerHTML = "";
+  const cartoes = el("div", "cartoes");
+  const cartao = (rot, val, det) => { const d = el("div", "cartao"); d.append(el("div", "rot", rot), el("div", "val", val)); if (det) d.append(el("div", "det", det)); cartoes.append(d); };
+  cartao("Sistema", a.sistema);
+  const cpu = a.processador;
+  cartao("Processador", cpu.nome, `${cpu.nucleos} núcleos` + (cpu.avx2 === false ? " · sem AVX2 (mais lento para IA)" : cpu.avx2 ? " · com AVX2" : ""));
+  cartao("Memória RAM", `${Math.round(a.ram_gb)} GB`, "quanto mais, maiores os modelos que cabem");
+  if (a.placas.length) a.placas.forEach(p => cartao("Placa de vídeo", p.nome,
+      p.fabricante === "apple" ? "memória unificada com o processador" :
+      (p.vram_gb ? `${Math.round(p.vram_gb)} GB de memória` : "") + (p.dedicada ? "" : (p.vram_gb ? " · " : "") + "integrada") + (p.sem_driver ? " · sem driver" : "")));
+  else cartao("Placa de vídeo", "Nenhuma encontrada");
+  cartao("Espaço livre", `${Math.round(a.disco_livre_gb)} GB`, "os modelos ficam guardados no disco");
+  c.append(cartoes);
+
+  const usaGpu = a.modo === "gpu";
+  const v = el("div", "veredito " + (usaGpu ? "gpu" : "cpu"));
+  const ic = el("div", "ic", usaGpu ? "🎮" : "🧮");
+  const txt = el("div");
+  txt.append(el("h3", "", usaGpu ? (a.so === "mac" ? "A IA vai usar a GPU do Mac" : "A IA pode usar a placa de vídeo + o processador")
+                                 : "A IA vai rodar no processador"));
+  txt.append(el("p", "", a.aviso));
+  v.append(ic, txt); c.append(v);
+
+  if (a.pode_forcar_cpu || estado.soCpu) {
+    c.append(el("div", "titulo-sec", "Onde rodar a IA"));
+    const esc = el("div", "escolha");
+    const op = (valor, titulo, desc) => {
+      const l = el("label", "opcao" + (estado.soCpu === valor ? " marcada" : ""));
+      const r = el("input"); r.type = "radio"; r.name = "onde"; r.checked = estado.soCpu === valor;
+      r.onchange = () => { estado.soCpu = valor; estado.modelos.clear(); analisar(); };
+      const t = el("div"); t.append(el("b", "", titulo), el("small", "", desc));
+      l.append(r, t); esc.append(l);
+    };
+    op(false, "Automático: placa de vídeo + processador" + (a.recomenda_so_cpu ? "" : " (recomendado)"),
+       "O Ollama põe na placa o que couber e o resto na memória do processador.");
+    op(true, "Só o processador" + (a.recomenda_so_cpu ? " (recomendado)" : ""),
+       "Não usa a placa de vídeo. Esquenta menos e gasta menos energia; em placas pequenas a velocidade quase não muda.");
+    c.append(esc);
+  }
+  if (estado.info && estado.info.opcoes.eco) {
+    c.append(el("div", "titulo-sec", "Notebook"));
+    const l = el("label", "opcao" + (estado.eco ? " marcada" : ""));
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = estado.eco;
+    cb.onchange = () => { estado.eco = cb.checked; l.classList.toggle("marcada", cb.checked); };
+    const t = el("div"); t.append(el("b", "", "Modo econômico"), el("small", "", "Limita o processador e desliga o turbo enquanto a IA roda: mais lento, mas esquenta menos e evita desligamentos com bateria fraca."));
+    l.append(cb, t); c.append(l);
+  }
+  if (!estado.modelos.size) estado.modelos.add(a.recomendado);
+}
+
+/* ------------------------------------------------------------------ modelos */
+function desenharModelos() {
+  const c = $("#modelos"); c.innerHTML = "";
+  for (const m of estado.analise.modelos) {
+    const cabe = m.onde !== "nao_cabe";
+    const card = el("label", "modelo" + (estado.modelos.has(m.nome) ? " marcado" : "") + (cabe ? "" : " bloqueado"));
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = estado.modelos.has(m.nome); cb.disabled = !cabe;
+    cb.onchange = () => { cb.checked ? estado.modelos.add(m.nome) : estado.modelos.delete(m.nome); card.classList.toggle("marcado", cb.checked); resumo(); };
+    const meio = el("div");
+    const nome = el("div", "nome", m.rotulo);
+    if (m.recomendado) nome.append(el("span", "chip-rec", "Recomendado"));
+    meio.append(nome, el("div", "desc", m.descricao));
+    const et = el("div", "etiquetas");
+    et.append(el("span", "etiqueta " + m.onde, ONDE[m.onde] + (m.fracao_gpu ? ` · ${m.fracao_gpu}% na placa` : "")));
+    et.append(el("span", "etiqueta", "precisa de ~" + m.precisa_gb.toFixed(1).replace(".", ",") + " GB de memória"));
+    meio.append(et);
+    const lado = el("div", "lado");
+    lado.append(el("div", "tamanho", m.tamanho_gb.toFixed(1).replace(".", ",") + " GB"));
+    lado.append(el("div", "estrelas", "★".repeat(Math.min(m.qualidade, 5)) + (m.qualidade > 5 ? "+" : "")));
+    if (cabe) {
+      const nivel = { rapido: 4, bom: 3, lento: 2, muito_lento: 1 }[m.velocidade];
+      const b = el("div", "barras v" + nivel); for (let i = 0; i < 4; i++) b.append(el("i"));
+      lado.append(b, el("div", "vel", `${m.velocidade_texto} · ~${Math.round(m.tokens_s)} tokens/s`));
+    } else lado.append(el("div", "vel", "não cabe neste computador"));
+    card.append(cb, meio, lado); c.append(card);
+  }
+  resumo();
+}
+function resumo() {
+  const a = estado.analise, r = $("#resumo-download");
+  const escolhidos = a.modelos.filter(m => estado.modelos.has(m.nome));
+  const total = escolhidos.reduce((s, m) => s + m.tamanho_gb, 0);
+  const falta = total + 2 > a.disco_livre_gb;
+  r.className = "resumo-download" + (falta ? " alerta" : "");
+  r.textContent = !escolhidos.length ? "Nenhum modelo escolhido: o Lumero só funciona depois de baixar pelo menos um." :
+    `Download: ${total.toFixed(1).replace(".", ",")} GB · espaço livre: ${Math.round(a.disco_livre_gb)} GB` +
+    (falta ? " — não há espaço suficiente!" : "") + " · As velocidades são estimativas.";
+  $("#avancar").disabled = falta;
+}
+
+/* ------------------------------------------------------------------ opções */
+function desenharOpcoes() {
+  const c = $("#opcoes"); c.innerHTML = ""; const o = estado.info.opcoes;
+  const chave = (id, titulo, desc) => {
+    const d = el("div", "chave" + (estado.opcoes[id] ? " ligada" : ""));
+    const t = el("div", "txt"); t.append(el("b", "", titulo), el("small", "", desc));
+    d.append(t, el("div", "interruptor"));
+    d.onclick = () => { estado.opcoes[id] = !estado.opcoes[id]; d.classList.toggle("ligada", estado.opcoes[id]); };
+    c.append(d);
+  };
+  if (o.bloquear) chave("bloquear", "Bloquear a internet do Ollama", "O modelo não precisa de internet para conversar. A pesquisa do Lumero continua funcionando (quem pesquisa é o Lumero, não o Ollama)." + (estado.info.so === "windows" ? " Pede permissão de administrador." : ""));
+  if (o.voz) chave("voz", "Voz", "Falar com o microfone e ouvir as respostas, tudo offline (~300 MB a mais).");
+  if (o.extras) chave("extras", "Ferramentas extras", "ffmpeg, 7-Zip e Git: para vídeos, áudios, arquivos compactados e projetos de código.");
+  if (o.atalho_area) chave("atalho_area", "Atalho na área de trabalho", "Além do atalho no menu Iniciar (Ctrl+Alt+A).");
+  if (o.autostart) chave("manter_autostart", "Ollama ligando junto com o Windows", "Desligado, o Lumero liga o Ollama quando abre e desliga quando fecha (economiza memória).");
+  if (estado.info.so === "mac") c.append(el("p", "sub", "No Mac, o instalador usa o Homebrew. Se ele ainda não estiver instalado, o macOS vai pedir a sua senha."));
+  if (estado.info.so === "linux") c.append(el("p", "sub", "Depois de clicar em Instalar, o sistema pede a sua senha uma vez."));
+}
+
+/* ------------------------------------------------------------------ instalação */
+const NOMES_ETAPAS = { pacotes: "Programas necessários", ollama: "Ollama (o motor da IA)", modelos: "Modelos de IA",
+                       lumero: "Lumero e atalhos", seguranca: "Segurança e últimos ajustes", voz: "Voz" };
+function etapasDoSistema() {
+  const so = estado.info.so, lista = [];
+  if (so === "linux") lista.push(...(estado.info.pacote ? ["ollama", "modelos", "seguranca"] : ["pacotes", "ollama", "modelos", "seguranca", "lumero"]));
+  else if (so === "mac") lista.push("pacotes", "lumero", "modelos", "seguranca");
+  else lista.push("pacotes", "lumero", "modelos", "seguranca");
+  if (estado.opcoes.voz && estado.info.opcoes.voz) lista.push("voz");
+  return lista;
+}
+let etapaAtual = null;
+function marcarEtapa(id) {
+  const li = document.querySelector(`#passos li[data-id="${id}"]`); if (!li) return;
+  document.querySelectorAll("#passos li.rodando").forEach(x => { x.className = "feito"; x.querySelector(".est").textContent = "✓"; });
+  // as etapas anteriores que ficaram para trás também estão feitas
+  let antes = true;
+  document.querySelectorAll("#passos li").forEach(x => {
+    if (x === li) antes = false;
+    else if (antes && !x.classList.contains("feito")) { x.className = "feito"; x.querySelector(".est").textContent = "✓"; }
+  });
+  li.className = "rodando"; li.querySelector(".est").innerHTML = '<span class="girando"></span>';
+  etapaAtual = id;
+  if (id !== "modelos") $("#progresso-modelo").style.display = "none";
+}
+function log(texto, erro) {
+  const l = $("#log"); const s = el("span", erro ? "erro" : "", texto + "\n"); l.append(s);
+  while (l.childNodes.length > 600) l.firstChild.remove();
+  l.scrollTop = l.scrollHeight;
+}
+async function instalar() {
+  irPara(5);
+  const p = $("#passos"); p.innerHTML = "";
+  for (const id of etapasDoSistema()) {
+    const li = el("li"); li.dataset.id = id;
+    li.append(el("span", "est", "○"), el("span", "", NOMES_ETAPAS[id]));
+    p.append(li);
+  }
+  $("#aviso-senha").style.display = estado.info.so === "linux" ? "block" : "none";
+  const dados = { modelos: estado.analise.modelos.filter(m => estado.modelos.has(m.nome)).map(m => m.nome),
+                  so_cpu: estado.soCpu, eco: estado.eco, ...estado.opcoes };
+  try { await api("/api/instalar", dados); } catch (e) { fim(false, e.message); }
+}
+function fim(sucesso, mensagem) {
+  document.querySelectorAll("#passos li.rodando").forEach(x => { x.className = sucesso ? "feito" : "erro"; x.querySelector(".est").textContent = sucesso ? "✓" : "✕"; });
+  if (sucesso) document.querySelectorAll("#passos li").forEach(x => { if (!x.classList.contains("feito")) { x.className = "feito"; x.querySelector(".est").textContent = "✓"; } });
+  const final = $("#p6"); final.className = "pagina final " + (sucesso ? "ok" : "falhou");
+  $("#final-icone").textContent = sucesso ? "✓" : "!";
+  $("#final-titulo").textContent = sucesso ? "O Lumero está pronto!" : "A instalação não terminou";
+  const so = estado.info.so;
+  $("#final-texto").textContent = sucesso
+    ? (so === "windows" ? "Procure \"Lumero\" no menu Iniciar ou aperte Ctrl+Alt+A." : so === "mac" ? "O Lumero está em Aplicativos (procure no Spotlight com Cmd+Espaço)." : "Procure \"Lumero\" no menu de aplicativos ou aperte Ctrl+Alt+A.")
+    : (mensagem || "Algo deu errado.").replace(/[.!]?\s*$/, ".") + " Veja os detalhes e tente de novo.";
+  const b = $("#final-botoes"); b.innerHTML = "";
+  if (sucesso) {
+    const abrir = el("button", "botao principal", "Abrir o Lumero");
+    abrir.onclick = async () => { await api("/api/abrir_lumero", {}).catch(() => {}); sair(); };
+    const fechar = el("button", "botao", "Fechar"); fechar.onclick = sair;
+    b.append(abrir, fechar);
+  } else {
+    const ver = el("button", "botao", "Ver detalhes"); ver.onclick = () => { irPara(5); $("#detalhes").open = true; };
+    const denovo = el("button", "botao principal", "Tentar de novo"); denovo.onclick = () => irPara(4);
+    b.append(ver, denovo);
+  }
+  irPara(6);
+}
+async function sair() { try { await api("/api/sair", {}); } catch (e) {} window.close(); }
+
+function conectar() {
+  const fonte = new EventSource("/api/eventos?t=" + encodeURIComponent(TOKEN));
+  fonte.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    if (ev.tipo === "etapa") marcarEtapa(ev.id);
+    else if (ev.tipo === "modelo") {
+      const pm = $("#progresso-modelo"); pm.style.display = "block";
+      $("#modelo-atual").textContent = "Baixando " + ev.nome; $("#modelo-pct").textContent = "0%"; $("#modelo-barra").style.width = "0";
+      const li = document.querySelector('#passos li[data-id="modelos"] .extra') || (() => { const s = el("span", "extra"); document.querySelector('#passos li[data-id="modelos"]').append(s); return s; })();
+      li.textContent = ev.nome;
+      log("Baixando " + ev.nome + "…");
+    } else if (ev.tipo === "progresso") {
+      $("#progresso-modelo").style.display = "block";
+      $("#modelo-pct").textContent = ev.pct + "%"; $("#modelo-barra").style.width = ev.pct + "%";
+    } else if (ev.tipo === "log") log(ev.texto, ev.erro);
+    else if (ev.tipo === "senha") $("#aviso-senha").style.display = "block";
+    else if (ev.tipo === "aviso_fechar") alert("Espere a instalação terminar antes de fechar.");
+    else if (ev.tipo === "fim") fim(ev.sucesso, ev.mensagem);
+  };
+}
+
+$("#avancar").onclick = () => {
+  if (estado.pagina === 1) { irPara(2); if (!estado.analise) analisar(); }
+  else if (estado.pagina === 4) instalar();
+  else irPara(estado.pagina + 1);
+};
+$("#voltar").onclick = () => irPara(Math.max(1, estado.pagina - 1));
+window.addEventListener("beforeunload", e => { if (estado.pagina === 5) { e.preventDefault(); e.returnValue = ""; } });
+setInterval(() => api("/api/vivo", {}).catch(() => {}), 20000);
+
+(async () => {
+  if (!TOKEN) { document.body.innerHTML = "<p style='padding:40px'>Abra o instalador pelo script de instalação.</p>"; return; }
+  estado.info = await api("/api/info");
+  estado.eco = !!estado.info.opcoes.eco;
+  if (estado.info.so === "windows") estado.opcoes.extras = true;
+  conectar();
+  irPara(1);
+  analisar().then(() => {
+    estado.soCpu = !!estado.analise.recomenda_so_cpu;
+    if (estado.soCpu) { estado.modelos.clear(); return analisar(); }
+  }).catch(e => { $("#analise").textContent = "Não consegui analisar o computador: " + e.message; });
+})();
+</script>
+</body>
+</html>

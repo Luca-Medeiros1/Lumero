@@ -42,15 +42,16 @@ Source: "..\..\assets\lumero.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\lumero.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\windows\instalar.ps1"; DestDir: "{app}\windows"; Flags: ignoreversion
 Source: "..\..\windows\desinstalar.ps1"; DestDir: "{app}\windows"; Flags: ignoreversion
+Source: "..\..\instalador\hardware.py"; DestDir: "{app}\instalador"; Flags: ignoreversion
+Source: "..\..\instalador\instalador.py"; DestDir: "{app}\instalador"; Flags: ignoreversion
+Source: "..\..\instalador\instalador.html"; DestDir: "{app}\instalador"; Flags: ignoreversion
+Source: "..\..\assets\lumero.svg"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 [Run]
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\instalar.ps1"" -SemRegistro"; \
-  StatusMsg: "Configurando o Lumero (Python, Ollama e modelos de IA)..."; \
+  StatusMsg: "Preparando o instalador do Lumero (pode instalar o Python)..."; \
   Flags: waituntilterminated
-Filename: "{localappdata}\Lumero\venv\Scripts\pythonw.exe"; \
-  Parameters: """{localappdata}\Lumero\lumero_gui.py"""; \
-  Description: "Abrir o Lumero agora"; Flags: postinstall nowait skipifsilent skipifdoesntexist
 
 [UninstallRun]
 Filename: "powershell.exe"; \

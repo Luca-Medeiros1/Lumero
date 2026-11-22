@@ -11,7 +11,7 @@ APP="$TMP/Lumero/Lumero.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/lumero" "$SAIDA"
 
 cp "$RAIZ/assets/lumero.icns" "$APP/Contents/Resources/lumero.icns"
-cp -R "$RAIZ/lumero.py" "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$RAIZ/assets" "$RAIZ/mac" "$RAIZ/comum" "$APP/Contents/Resources/lumero/"
+cp -R "$RAIZ/lumero.py" "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$RAIZ/assets" "$RAIZ/mac" "$RAIZ/comum" "$RAIZ/instalador" "$APP/Contents/Resources/lumero/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -33,7 +33,7 @@ PLIST
 
 cat > "$APP/Contents/MacOS/Lumero" <<'LANCADOR'
 #!/bin/bash
-# Abre a janela do Lumero. Na primeira vez, instala (no Terminal).
+# Abre a janela do Lumero. Na primeira vez, abre o instalador (janela ou Terminal).
 RES="$(cd "$(dirname "$0")/../Resources/lumero" && pwd)"
 DADOS="$HOME/Library/Application Support/Lumero"
 geracao() { sed -n 's/^GERACAO = \([0-9]*\).*/\1/p' "$1" 2>/dev/null | head -1; }
@@ -48,6 +48,9 @@ if [ -x "$DADOS/venv/bin/python" ] && [ -f "$DADOS/Lumero.command" ]; then
     cp "$RES/lumero_gui.py" "$RES/lumero_gui.html" "$DADOS/" 2>/dev/null
     export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
     exec "$DADOS/venv/bin/python" "$DADOS/lumero_gui.py"
+elif xcode-select -p >/dev/null 2>&1 && [ -x /usr/bin/python3 ]; then
+    # instalador com janela (abre no navegador)
+    exec /usr/bin/python3 "$RES/instalador/instalador.py" --sem-app --app "$(cd "$(dirname "$0")/../.." && pwd)"
 else
     INSTALAR="${TMPDIR:-/tmp}/lumero-instalar.command"
     {

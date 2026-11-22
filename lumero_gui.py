@@ -337,7 +337,8 @@ def preparar_anexos(anexos):
                          "miniatura": _miniatura(dados) if imagem else None})
         if imagem and L.MODELO_VISAO == L.MODELO:
             imagens.append(_imagem_para_ia(dados))
-            extra.append(f"[Imagem anexada: {nome}, salva em {caminho}]")
+            extra.append(f"[Imagem anexada: {nome}. Ela já está nesta mensagem: responda "
+                         "olhando para ela, sem usar descrever_imagem.]")
         elif imagem:
             extra.append(f"[Imagem anexada, salva em {caminho}: use descrever_imagem para ver]")
         else:

@@ -4,11 +4,15 @@
 #  Como usar: dê dois cliques em  windows\instalar.cmd
 #  (ou no PowerShell:  powershell -ExecutionPolicy Bypass -File windows\instalar.ps1)
 #
+#  Abre o instalador com janela. Para instalar no console: instalar.cmd -Terminal
 #  Opções:  -Sim         responde "sim" para tudo (escolhas padrão)
 #           -Voz         também instala a voz (/falar e /ouvir)
 #           -SemRegistro não cria a entrada em "Aplicativos instalados" (usado pelo Setup .exe)
 # =============================================================================
-param([switch]$Sim, [switch]$Voz, [switch]$SemVoz, [switch]$SemRegistro, [switch]$SemPausa)
+param([switch]$Sim, [switch]$Voz, [switch]$SemVoz, [switch]$SemRegistro, [switch]$SemPausa,
+      [switch]$Terminal, [switch]$NaoInterativo, [string]$Modelos = '-', [switch]$SoCpu,
+      [switch]$Bloquear, [switch]$Extras, [switch]$AtalhoArea, [switch]$ManterAutostart)
+# -NaoInterativo é usado pelo instalador com janela: as respostas vêm dos outros parâmetros
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
@@ -24,7 +28,11 @@ function Sair($codigo) {
 }
 function Passo($texto) { Write-Host ''; Write-Host "==> $texto" -ForegroundColor Yellow }
 function Aviso($texto) { Write-Host "    ⚠️  $texto" -ForegroundColor Yellow }
-function Pergunta($texto, $padrao) {
+if ($NaoInterativo) { $Sim = $true; $SemPausa = $true }
+$Respostas = @{ autostart = -not $ManterAutostart; extras = [bool]$Extras; atalho = [bool]$AtalhoArea;
+                bloquear = [bool]$Bloquear; socpu = [bool]$SoCpu }
+function Pergunta($texto, $padrao, $chave) {
+    if ($NaoInterativo -and $chave) { return [bool]$Respostas[$chave] }
     if ($Sim) { return ($padrao -eq 's') }
     $r = Read-Host "    $texto"
     if (-not $r) { $r = $padrao }
@@ -88,6 +96,28 @@ foreach ($arq in @('lumero.py', 'lumero_gui.py', 'lumero_gui.html', 'assets\lume
 }
 New-Item -ItemType Directory -Force -Path $Dados, $Bin | Out-Null
 
+if (-not $Terminal -and -not $NaoInterativo) {
+    Write-Host 'Preparando o instalador do Lumero...'
+    $Python = Achar-Python
+    if (-not $Python) {
+        Winget-Instalar 'Python.Python.3.12' 'Python 3.12 (necessário para o Lumero)'
+        $Python = Achar-Python
+        if (-not $Python) {
+            foreach ($c in Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python3*\python.exe') -ErrorAction SilentlyContinue) { $Python = $c.FullName }
+        }
+    }
+    if ($Python) {
+        $janela = Join-Path (Split-Path -Parent $Python) 'pythonw.exe'
+        if (-not (Test-Path -LiteralPath $janela)) { $janela = $Python }
+        $argumentos = @("`"$(Join-Path $Raiz 'instalador\instalador.py')`"")
+        if ($SemRegistro) { $argumentos += '--sem-registro' }
+        Start-Process -FilePath $janela -ArgumentList $argumentos
+        exit 0
+    }
+    Write-Host 'Não consegui preparar a janela do instalador; continuando aqui no console.' -ForegroundColor Yellow
+}
+
+Write-Host '##PASSO pacotes'
 # ----------------------------------------------------------------------------- 1
 Passo '1/7 Conferindo o computador'
 $so = Get-CimInstance Win32_OperatingSystem
@@ -133,7 +163,7 @@ if (-not $Ollama) {
 $inicializar = Join-Path ([Environment]::GetFolderPath('Startup')) 'Ollama.lnk'
 if (Test-Path -LiteralPath $inicializar) {
     Write-Host '    O Ollama está configurado para ligar sozinho com o Windows.'
-    if (Pergunta 'Deixar o Ollama desligado até você abrir o Lumero? (economiza memória) [S/n]' 's') {
+    if (Pergunta 'Deixar o Ollama desligado até você abrir o Lumero? (economiza memória) [S/n]' 's' 'autostart') {
         Remove-Item -LiteralPath $inicializar -Force
         Write-Host '    Pronto: o Lumero liga o Ollama ao abrir e desliga ao sair.'
     }
@@ -141,13 +171,14 @@ if (Test-Path -LiteralPath $inicializar) {
 
 # ----------------------------------------------------------------------------- 3
 Passo '3/7 Ferramentas extras (vídeo, áudio, compactar, git)'
-if (Pergunta 'Instalar ffmpeg, 7-Zip e Git? (recomendado) [S/n]' 's') {
+if (Pergunta 'Instalar ffmpeg, 7-Zip e Git? (recomendado) [S/n]' 's' 'extras') {
     if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Winget-Instalar 'Gyan.FFmpeg' 'ffmpeg' }
     if (-not (Test-Path "$env:ProgramFiles\7-Zip\7z.exe")) { Winget-Instalar '7zip.7zip' '7-Zip' }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Winget-Instalar 'Git.Git' 'Git' }
 }
 
 # ----------------------------------------------------------------------------- 4
+Write-Host '##PASSO lumero'
 Passo '4/7 Lumero'
 $Destino = Join-Path $Dados 'lumero.py'
 if (Test-Path -LiteralPath $Destino) {
@@ -215,7 +246,7 @@ $menu = [Environment]::GetFolderPath('Programs')
 Criar-Atalho (Join-Path $menu 'Lumero.lnk') $true $false
 Criar-Atalho (Join-Path $menu 'Lumero (terminal).lnk') $false $true
 Write-Host '    Atalhos no menu Iniciar: "Lumero" (janela de chat, Ctrl+Alt+A) e "Lumero (terminal)".'
-if (Pergunta 'Criar também um atalho na área de trabalho? [s/N]' 'n') {
+if (Pergunta 'Criar também um atalho na área de trabalho? [s/N]' 'n' 'atalho') {
     Criar-Atalho (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Lumero.lnk') $false $false
 }
 $cmdGui = "@echo off`r`nstart `"`" `"$PyJanela`" `"$Gui`" %*`r`n"
@@ -245,30 +276,53 @@ if (-not (Ollama-Responde)) {
 }
 if (-not (Ollama-Responde)) { Write-Host '    O Ollama não respondeu. Abra o Ollama pelo menu Iniciar e rode o instalador de novo.' -ForegroundColor Red; Sair 1 }
 
-if ($vram -ge 7000 -and $ram -ge 16) { $rec = '3' } elseif ($ram -ge 8) { $rec = '1' } else { $rec = '2' }
-function Marca($n) { if ($rec -eq $n) { '  ← recomendado' } else { '' } }
-Write-Host '    Modelos (todos conversam, usam ferramentas e enxergam imagens):'
-Write-Host "    [1] qwen3.5:4b  equilibrado: bom em quase tudo$(Marca '1')"
-Write-Host "    [2] qwen3.5:2b  mais rápido e leve, mas erra mais$(Marca '2')"
-Write-Host "    [3] qwen3.5:9b  mais esperto, mas pesado: placa de vídeo com 8 GB$(Marca '3')"
-Write-Host '    [0] nenhum agora'
-$escolha = $rec
-if (-not $Sim) {
-    $r = Read-Host "    Quais baixar? (ex: 1 2) [$rec]"
-    if ($r) { $escolha = $r }
+# só o processador? (a análise do computador recomenda quando a placa é pequena)
+$hardware = Join-Path $Raiz 'instalador\hardware.py'
+$analise = $null
+try { $analise = (& $Py $hardware --json) | ConvertFrom-Json } catch {}
+if (-not $NaoInterativo -and $analise -and $analise.pode_forcar_cpu) {
+    Write-Host "    $($analise.aviso)"
+    $padraoCpu = if ($analise.recomenda_so_cpu) { 's' } else { 'n' }
+    $Respostas.socpu = Pergunta "Usar só o processador, sem a placa de vídeo? [$(if ($padraoCpu -eq 's') { 'S/n' } else { 's/N' })]" $padraoCpu
+}
+foreach ($var in @('CUDA_VISIBLE_DEVICES', 'OLLAMA_VULKAN', 'GGML_VK_VISIBLE_DEVICES')) {
+    $valor = if ($Respostas.socpu) { @{ CUDA_VISIBLE_DEVICES = '-1'; OLLAMA_VULKAN = '0'; GGML_VK_VISIBLE_DEVICES = '-1' }[$var] } else { $null }
+    [Environment]::SetEnvironmentVariable($var, $valor, 'User')
+}
+if ($Respostas.socpu) { Write-Host '    O Ollama vai usar só o processador.' }
+
+Write-Host '##PASSO modelos'
+$lista = @()
+if ($Modelos -ne '-') {
+    $lista = @($Modelos -split '[\s,]+' | Where-Object { $_ })
+} elseif ($analise) {
+    $argsHw = @($hardware); if ($Respostas.socpu) { $argsHw += '--so-cpu' }
+    & $Py @argsHw
+    if ($Respostas.socpu) { $analise = (& $Py $hardware --json --so-cpu) | ConvertFrom-Json }
+    $rec = 1 + [array]::IndexOf(@($analise.modelos | ForEach-Object { $_.recomendado }), $true)
+    $escolha = "$rec"
+    if (-not $Sim) {
+        $r = Read-Host "    Quais baixar? (números separados por espaço, 0 = nenhum) [$rec]"
+        if ($r) { $escolha = $r }
+    }
+    foreach ($n in ($escolha -split '[\s,]+')) {
+        if ($n -match '^\d+$' -and [int]$n -ge 1 -and [int]$n -le $analise.modelos.Count) {
+            $lista += $analise.modelos[[int]$n - 1].nome
+        }
+    }
 }
 $padrao = $null
-foreach ($n in ($escolha -split '[\s,]+')) {
-    $modelo = @{ '1' = 'qwen3.5:4b'; '2' = 'qwen3.5:2b'; '3' = 'qwen3.5:9b' }[$n]
-    if (-not $modelo) { continue }
+foreach ($modelo in $lista) {
+    Write-Host "##MODELO $modelo"
     Write-Host "    Baixando $modelo..."
-    & $Ollama pull $modelo
+    & $Ollama pull $modelo 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -eq 0) { if (-not $padrao) { $padrao = $modelo } } else { Aviso "não consegui baixar $modelo" }
 }
 if ($padrao) { Gravar-Config 'MODELO' $padrao; Write-Host "    Modelo do Lumero: $padrao" }
 if ($servidor) { Stop-Process -Id $servidor.Id -Force -ErrorAction SilentlyContinue }
 
 # ----------------------------------------------------------------------------- 6
+Write-Host '##PASSO seguranca'
 Passo '6/7 Internet do Ollama'
 Write-Host '    O Ollama não precisa de internet para conversar. A pesquisa do Lumero continua'
 Write-Host '    funcionando com ele bloqueado (quem pesquisa é o Lumero).'
@@ -293,7 +347,7 @@ if (`$bloqueado) { Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidde
 [IO.File]::WriteAllText((Join-Path $Bin 'lumero-baixar-modelo.cmd'),
     "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0lumero-baixar-modelo.ps1`" %*`r`n",
     (New-Object Text.UTF8Encoding($false)))
-if (Pergunta 'Bloquear a internet do Ollama no Firewall do Windows? (pede permissão de administrador) [S/n]' 's') {
+if (Pergunta 'Bloquear a internet do Ollama no Firewall do Windows? (pede permissão de administrador) [S/n]' 's' 'bloquear') {
     $pasta = Split-Path -Parent $Ollama
     $regras = @"
 Remove-NetFirewallRule -DisplayName 'Lumero - Ollama sem internet' -ErrorAction SilentlyContinue
@@ -323,6 +377,7 @@ if (-not $Voz -and -not $SemVoz) {
     $querVoz = Pergunta 'Instalar a voz? (/falar com o microfone; ~300 MB) [s/N]' 'n'
 }
 if ($querVoz) {
+    Write-Host '##PASSO voz'
     & $Py -m pip install --quiet --disable-pip-version-check pywhispercpp sounddevice numpy
     if ($LASTEXITCODE -eq 0) { Write-Host '    ✓ /falar instalado (o modelo de ~150 MB é baixado no primeiro uso).' }
     else { Aviso 'não consegui instalar o reconhecimento de fala.' }
@@ -353,4 +408,5 @@ Write-Host '  • Prefere o terminal? Use o atalho "Lumero (terminal)".'
 Write-Host '  • No terminal (abra um novo), digite: lumero'
 Write-Host "  • Configurações: $Dados\config.json"
 Write-Host '  • Desinstalar: Configurações → Aplicativos → Lumero'
+Write-Host '##FIM'
 Sair 0

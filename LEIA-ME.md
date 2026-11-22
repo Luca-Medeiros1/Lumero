@@ -47,14 +47,31 @@ Microsoft Store.
 
 ### Qual modelo usar
 
-| Modelo | Memória RAM | Para quem |
-|---|---|---|
-| `qwen3.5:2b` | 8 GB | computadores mais fracos: responde mais rápido, mas erra mais |
-| `qwen3.5:4b` | 8 GB (melhor com 12 GB) | a maioria dos computadores: o equilíbrio entre velocidade e acerto |
-| `qwen3.5:9b` | 16 GB | placa NVIDIA com 8 GB ou mais, ou Mac Apple Silicon com 16 GB ou mais |
+O instalador analisa o computador (processador, RAM, placa de vídeo e espaço livre) e mostra
+todos os modelos da família Qwen 3.5, dizendo para cada um **onde ele roda** e a velocidade
+estimada:
 
-O instalador olha a RAM e a placa de vídeo e já recomenda um modelo. Sem placa de vídeo,
-cada resposta pode levar de alguns segundos a mais de um minuto, conforme o processador.
+- **Placa de vídeo:** o modelo cabe inteiro na memória da placa. É o mais rápido.
+- **Placa + processador:** parte fica na placa e o resto na RAM. O Ollama faz essa divisão sozinho.
+- **Processador:** sem placa compatível, ou com placa pequena demais (menos de ~4 GB).
+- **Não cabe:** o modelo precisa de mais memória do que o computador tem.
+
+| Modelo | Download | Memória que precisa | Para quem |
+|---|---|---|---|
+| `qwen3.5:0.8b` | 1,0 GB | ~1,5 GB | computadores bem fracos |
+| `qwen3.5:2b` | 2,7 GB | ~3,5 GB | tarefas simples, 8 GB de RAM |
+| `qwen3.5:4b` | 3,4 GB | ~4,3 GB | a maioria dos computadores |
+| `qwen3.5:9b` | 6,6 GB | ~8 GB | placa com 8 GB+, Mac com 16 GB+ ou 16 GB de RAM |
+| `qwen3.5:27b` | 17 GB | ~20 GB | placa com 24 GB ou Mac com 32 GB+ |
+| `qwen3.5:35b` | 24 GB | ~28 GB | placa de 12 GB+ com 32 GB de RAM, ou Mac com 48 GB+ |
+| `qwen3.5:122b` | 81 GB | ~94 GB | estações de trabalho e Macs com 128 GB |
+
+O modelo recomendado é o mais esperto que ainda responde numa velocidade boa nesse computador.
+
+Por padrão, o Ollama usa a placa de vídeo quando ela é compatível (NVIDIA, AMD ou Apple). Se a
+placa tiver pouca memória (como uma MX150 de 2 GB), o instalador recomenda **só o
+processador**: a diferença de velocidade é pequena e o notebook esquenta menos. Dá para
+escolher entre as duas opções na tela de análise.
 
 ## Instalar pelo script (recomendado)
 
@@ -66,12 +83,19 @@ Extraia o zip, abra a pasta `lumero` e:
 | macOS | `bash mac/instalar.sh` (no Terminal) |
 | Windows | dois cliques em `windows\instalar.cmd` |
 
+O instalador abre uma **janela** com cinco passos: boas-vindas, análise do computador,
+escolha dos modelos, opções e instalação, com o progresso dos downloads. A senha é pedida
+uma vez, pela janela do sistema. Prefere o terminal? Use `--terminal`
+(`bash linux/instalar.sh --terminal`, `bash mac/instalar.sh --terminal` ou
+`windows\instalar.ps1 -Terminal`).
+
 O instalador:
 
 - instala o que falta: Python, Ollama, ffmpeg, 7-Zip, git. No Mac usa o Homebrew, no
   Windows usa o winget e no Linux usa o gerenciador da sua distribuição;
 - cria o atalho no menu (Ctrl+Alt+A no GNOME e no Windows), o comando `lumero` e o ícone;
-- pergunta quais modelos baixar e recomenda um conforme a RAM e a placa de vídeo;
+- analisa o computador, diz se a IA vai rodar na placa de vídeo, no processador ou nos dois e
+  mostra os modelos que cabem, com um recomendado;
 - oferece bloquear a internet do Ollama. No Linux isso é feito pelo systemd e no
   Windows pelo Firewall. A pesquisa do Lumero continua funcionando com o bloqueio;
 - no Linux, oferece o modo econômico para notebooks: limita a CPU e desliga o turbo;

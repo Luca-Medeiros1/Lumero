@@ -1,7 +1,10 @@
 #!/bin/sh
 # Lumero instalado por pacote: abre a janela de chat.
-# Sem o Ollama ainda, abre o terminal, que oferece instalar e configurar.
+# Sem o Ollama ainda, abre o instalador com janela (configura o Ollama e baixa os modelos).
 if ! command -v ollama >/dev/null 2>&1 && [ ! -x /usr/local/bin/ollama ]; then
+    if [ -n "$DISPLAY$WAYLAND_DISPLAY" ] && command -v pkexec >/dev/null 2>&1; then
+        exec python3 /usr/share/lumero/instalador/instalador.py --pacote
+    fi
     exec /usr/bin/lumero-janela
 fi
 exec python3 /usr/share/lumero/lumero_gui.py "$@"

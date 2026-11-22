@@ -47,6 +47,9 @@ jobs:
           lumero --versao
           python3 -c "compile(open('/usr/share/lumero/lumero_gui.py').read(), 'lumero_gui.py', 'exec')"
           test -f /usr/share/lumero/lumero_gui.html
+          test -x /usr/share/lumero/raiz.sh
+          test -f /usr/share/lumero/instalador/instalador.html
+          python3 /usr/share/lumero/instalador/hardware.py --json > /dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: lumero-linux

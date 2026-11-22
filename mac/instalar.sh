@@ -3,7 +3,9 @@
 #  Instalador do Lumero para macOS (Apple Silicon e Intel)
 #
 #  Uso: abra o Terminal, entre na pasta do Lumero e rode:   bash mac/instalar.sh
+#  Abre o instalador com janela. Para instalar pelo Terminal: bash mac/instalar.sh --terminal
 #  Opções:  --sim   responde "sim" para tudo     --voz   também instala a voz
+#           --nao-interativo --modelos "a b"   usado pelo instalador com janela
 #           --sem-app  não cria o Lumero.app (usado pelo próprio app baixado em .dmg)
 #
 #  Usa o Homebrew (instala se não tiver) para o Python, o Ollama e o ffmpeg.
@@ -17,16 +19,21 @@ BIN="$HOME/.local/bin"
 APP="$HOME/Applications/Lumero.app"
 API="http://127.0.0.1:11434"
 
-SIM=0; VOZ=""; CRIAR_APP=1
-for arg in "$@"; do
-    case "$arg" in
-        --sim) SIM=1 ;;
+SIM=0; VOZ=""; CRIAR_APP=1; TERMINAL=0; NAO_INTERATIVO=0; MODELOS_ARG="-"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sim) SIM=1; TERMINAL=1 ;;
+        --terminal) TERMINAL=1 ;;
+        --nao-interativo) NAO_INTERATIVO=1; SIM=1; TERMINAL=1 ;;
+        --modelos) MODELOS_ARG="$2"; shift ;;
         --sem-app) CRIAR_APP=0 ;;
         --voz) VOZ=1 ;;
         --sem-voz) VOZ=0 ;;
-        *) echo "Opção desconhecida: $arg"; exit 1 ;;
+        *) echo "Opção desconhecida: $1"; exit 1 ;;
     esac
+    shift
 done
+export NONINTERACTIVE=$NAO_INTERATIVO   # Homebrew sem perguntas (a senha vem pelo SUDO_ASKPASS)
 
 minusculo() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 pergunta() {  # pergunta "texto" padrão(s/n) -> 0 = sim
@@ -49,11 +56,16 @@ esperar_ollama() {
 
 [ "$(uname)" = Darwin ] || { echo "Este instalador é para o macOS. No Linux use: bash linux/instalar.sh"; exit 1; }
 [ "$(id -u)" -eq 0 ] && { echo "Rode como o seu usuário normal (sem sudo)."; exit 1; }
+if [ "$TERMINAL" = 0 ] && [ -f "$RAIZ/instalador/instalador.py" ] && /usr/bin/xcode-select -p >/dev/null 2>&1; then
+    echo "Abrindo o instalador do Lumero..."
+    exec /usr/bin/python3 "$RAIZ/instalador/instalador.py" $([ "$CRIAR_APP" = 0 ] && echo --sem-app)
+fi
 for arq in lumero.py lumero_gui.py lumero_gui.html assets/lumero.icns; do
     [ -f "$RAIZ/$arq" ] || { echo "Falta o arquivo $arq. Extraia o zip inteiro e rode de novo."; exit 1; }
 done
 
 # ----------------------------------------------------------------------------- 1
+echo "##PASSO pacotes"
 passo "1/6 Conferindo o Mac"
 echo "    macOS $(sw_vers -productVersion) · $(uname -m)"
 if [ "$(sw_vers -productVersion | cut -d. -f1)" -lt 14 ]; then
@@ -75,7 +87,7 @@ if ! command -v brew >/dev/null; then
 fi
 if ! command -v brew >/dev/null; then
     echo "    O Homebrew (instalador de programas) não está instalado."
-    if pergunta "    Instalar o Homebrew agora? Ele pede a sua senha do Mac. [S/n]" s; then
+    if [ "$NAO_INTERATIVO" = 1 ] || pergunta "    Instalar o Homebrew agora? Ele pede a sua senha do Mac. [S/n]" s; then
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
             [ -x "$b" ] && eval "$("$b" shellenv)" && break
@@ -97,6 +109,7 @@ PY_BASE="$(brew --prefix)/bin/python3"
 [ -x "$PY_BASE" ] || PY_BASE="$(command -v python3)"
 
 # ----------------------------------------------------------------------------- 3
+echo "##PASSO lumero"
 passo "3/6 Lumero"
 mkdir -p "$DADOS" "$BIN" "$HOME/Applications"
 if [ -f "$DADOS/lumero.py" ]; then
@@ -191,30 +204,28 @@ if ! curl -fs "$API/api/version" >/dev/null 2>&1; then
     SERVE_PID=$!
 fi
 esperar_ollama || { echo "O Ollama não respondeu. Tente: ollama serve"; exit 1; }
-if [ "$(uname -m)" = arm64 ] && [ "$ram" -ge 16 ]; then rec=3
-elif [ "$ram" -ge 8 ]; then rec=1
-else rec=2; fi
-marca() { [ "$rec" = "$1" ] && echo "  ← recomendado" || true; }
-echo "    Modelos (todos conversam, usam ferramentas e enxergam imagens):"
-echo "    [1] qwen3.5:4b  equilibrado: bom em quase tudo$(marca 1)"
-echo "    [2] qwen3.5:2b  mais rápido e leve, mas erra mais$(marca 2)"
-echo "    [3] qwen3.5:9b  mais esperto: Mac M1/M2/M3/M4 com 16 GB ou mais$(marca 3)"
-echo "    [0] nenhum agora"
-escolha="$rec"
-if [ "$SIM" != 1 ]; then
-    read -r -p "    Quais baixar? (ex: 1 2) [$rec]: " escolha </dev/tty || true
-    escolha="${escolha:-$rec}"
+if [ "$MODELOS_ARG" = "-" ]; then   # Terminal: mostra a análise e pergunta
+    ANALISE="$("$PY" "$RAIZ/instalador/hardware.py" --json)"
+    "$PY" "$RAIZ/instalador/hardware.py"
+    REC="$("$PY" -c 'import json,sys; d=json.loads(sys.argv[1]); print([i for i, m in enumerate(d["modelos"], 1) if m["recomendado"]][0])' "$ANALISE")"
+    escolha="$REC"
+    if [ "$SIM" != 1 ]; then
+        read -r -p "    Quais baixar? (números separados por espaço, 0 = nenhum) [$REC]: " escolha </dev/tty || true
+        escolha="${escolha:-$REC}"
+    fi
+    MODELOS_ARG="$("$PY" -c 'import json,sys
+d = json.loads(sys.argv[1]); nomes = []
+for n in sys.argv[2].split():
+    if n.isdigit() and 1 <= int(n) <= len(d["modelos"]):
+        nomes.append(d["modelos"][int(n) - 1]["nome"])
+print(" ".join(nomes))' "$ANALISE" "$escolha")"
 fi
+echo "##PASSO modelos"
 padrao=""
-for n in $escolha; do
-    case "$n" in
-        1) modelo="qwen3.5:4b" ;;
-        2) modelo="qwen3.5:2b" ;;
-        3) modelo="qwen3.5:9b" ;;
-        *) continue ;;
-    esac
+for modelo in $MODELOS_ARG; do
+    echo "##MODELO $modelo"
     echo "    Baixando $modelo..."
-    if "$OLLAMA_BIN" pull "$modelo"; then
+    if "$OLLAMA_BIN" pull "$modelo" 2>&1; then
         [ -z "$padrao" ] && padrao="$modelo"
     else
         aviso "não consegui baixar $modelo"
@@ -241,6 +252,7 @@ echo "    Para baixar outro modelo depois: ollama serve & ollama pull NOME"
 
 # ----------------------------------------------------------------------------- 5
 passo "5/6 Voz (opcional)"
+[ "$VOZ" = 1 ] && echo "##PASSO voz"
 if [ -z "$VOZ" ]; then
     if pergunta "    Instalar a voz? (/falar com o microfone e /ouvir as respostas; ~300 MB) [s/N]" n; then VOZ=1; else VOZ=0; fi
 fi
@@ -252,6 +264,7 @@ else
 fi
 
 # ----------------------------------------------------------------------------- 6
+echo "##PASSO seguranca"
 passo "6/6 Permissões do macOS (na primeira vez que usar)"
 echo "    • Ler a tela (/tela): Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela → Terminal"
 echo "    • Microfone (/falar): o macOS pergunta na primeira gravação"
@@ -262,3 +275,4 @@ printf '\033[1;32m✓ Lumero instalado!\033[0m\n'
 echo "  • Abra pelo Spotlight (Cmd+Espaço, digite Lumero) ou pelo Launchpad: abre a janela de chat."
 echo "  • Prefere o terminal? Digite  lumero  num Terminal novo."
 echo "  • Configurações: $DADOS/config.json · Desinstalar: bash mac/desinstalar.sh"
+echo "##FIM"

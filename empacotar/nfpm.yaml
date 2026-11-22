@@ -41,6 +41,18 @@ contents:
   - src: ./empacotar/linux/vendor
     dst: /usr/share/lumero/vendor
     type: tree
+  - src: ./linux/raiz.sh
+    dst: /usr/share/lumero/raiz.sh
+    file_info:
+      mode: 0755
+  - src: ./instalador/hardware.py
+    dst: /usr/share/lumero/instalador/hardware.py
+  - src: ./instalador/instalador.py
+    dst: /usr/share/lumero/instalador/instalador.py
+  - src: ./instalador/instalador.html
+    dst: /usr/share/lumero/instalador/instalador.html
+  - src: ./assets/lumero.svg
+    dst: /usr/share/lumero/assets/lumero.svg
   - src: ./linux/configurar-ollama.sh
     dst: /usr/share/lumero/configurar-ollama.sh
     file_info: {mode: 0755}
