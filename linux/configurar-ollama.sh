@@ -18,6 +18,11 @@ pergunta() {
 }
 [[ $EUID -eq 0 ]] && { echo "Rode como o seu usuário normal (sem sudo)."; exit 1; }
 
+NOME="$(python3 "$HW" --nome 2>/dev/null)"
+read -r -p "Como você quer que o Lumero te chame? [${NOME:-sem nome}]: " resp </dev/tty || resp=""
+[[ -n "$resp" ]] && NOME="$resp"
+[[ -n "$NOME" ]] && python3 "$HW" --gravar-nome "$NOME" >/dev/null
+
 echo "==> Analisando o computador"
 ANALISE="$(python3 "$HW" --json)"
 campo() { python3 -c "import json,sys; d=json.loads(sys.argv[1]); print($2)" "$ANALISE"; }

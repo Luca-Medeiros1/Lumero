@@ -50,11 +50,12 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 23               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.2.1"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 24               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.2.2"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (maior = mais lento no processador)
+NOME_USUARIO = ""          # como o Lumero chama você (o instalador pergunta; troque com /nome)
 PENSAR = "auto"            # "auto" = decide sozinho; True = sempre pensa; False = nunca
                            # Dica: comece a mensagem com ! para forçar o modo pensar
 
@@ -148,7 +149,7 @@ OPCOES_CONFIG = {"MODELO", "MODELO_VISAO", "CONTEXTO", "PENSAR", "OLLAMA", "BUSC
                  "SEARXNG_URL", "SEARXNG_MOTORES", "PESQUISA_INTERNET", "GERENCIAR_OLLAMA",
                  "BUSCA_FOTOS", "TEMPERATURA_PAUSA", "TEMPERATURA_RETOMA",
                  "TEMPERATURA_CRITICA", "WHISPER_MODELO", "VOZ_PIPER", "VOZ_SISTEMA",
-                 "LIMITE_MEMORIA"}
+                 "LIMITE_MEMORIA", "NOME_USUARIO"}
 
 
 def _carregar_config():
@@ -169,6 +170,32 @@ def _carregar_config():
 
 
 _carregar_config()
+NOME_USUARIO = re.sub(r"\s+", " ", re.sub(r"[^\w\s'.-]", "", str(NOME_USUARIO))).strip()[:40]
+
+
+def gravar_config(**valores):
+    """Grava opções no config.json (o mesmo que a janela usa)."""
+    try:
+        with open(ARQ_CONFIG, encoding="utf-8") as f:
+            dados = json.load(f)
+        if not isinstance(dados, dict):
+            dados = {}
+    except (OSError, ValueError):
+        dados = {}
+    dados.update(valores)
+    os.makedirs(PASTA_DADOS, exist_ok=True)
+    with open(ARQ_CONFIG, "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=2, ensure_ascii=False)
+
+
+def trocar_nome(novo):
+    """Troca o nome do usuário. Devolve o nome gravado ("" = apagado)."""
+    global NOME_USUARIO
+    if str(novo or "").strip().lower() in ("apagar", "nenhum", "-"):
+        novo = ""
+    NOME_USUARIO = re.sub(r"\s+", " ", re.sub(r"[^\w\s'.-]", "", str(novo or ""))).strip()[:40]
+    gravar_config(NOME_USUARIO=NOME_USUARIO)
+    return NOME_USUARIO
 
 NAVEGADOR_UA = ("Mozilla/5.0 (X11; Linux x86_64; rv:140.0) "
                 "Gecko/20100101 Firefox/140.0")
@@ -800,7 +827,7 @@ def cabecalho():
     internet = {"searxng": "Google via SearXNG", "serper": "Google via Serper",
                 "duckduckgo": "DuckDuckGo"}.get(BUSCADOR, BUSCADOR)
     linhas = [
-        f"{laranja('✻')} {negrito('Lumero')}",
+        f"{laranja('✻')} {negrito('Lumero')}" + (cinza(f" · olá, {NOME_USUARIO}!") if NOME_USUARIO else ""),
         "",
         cinza("  /ajuda para ver os comandos · Ctrl+C interrompe"),
         "",
@@ -847,6 +874,7 @@ COMANDOS_BARRA = [
     ("/pensar", "modo pensar: auto, sempre ou nunca"),
     ("/pensamento", "mostra o raciocínio da última resposta"),
     ("/modelo", "mostra ou troca o modelo"),
+    ("/nome", "mostra ou troca o nome pelo qual o Lumero te chama"),
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras (ligam sozinhos pelo assunto)"),
     ("/memoria", "o que a IA lembra sobre você"),
@@ -1137,6 +1165,14 @@ def tratar_comando(texto, mensagens):
         if arg:
             MODELO = arg
         print(cinza(f"\n  ⎿  Modelo: {MODELO}"))
+    elif cmd == "/nome":
+        if arg:
+            trocar_nome(arg)
+            mensagens[0]["content"] = prompt_sistema()
+            print(cinza(f"\n  ⎿  Certo, vou te chamar de {NOME_USUARIO}." if NOME_USUARIO
+                        else "\n  ⎿  Nome apagado."))
+        else:
+            print(cinza(f"\n  ⎿  Seu nome: {NOME_USUARIO or '(nenhum)'}. Para trocar: /nome Seu Nome"))
     elif cmd == "/extras":
         if arg in ("todos", "tudo"):
             GRUPOS_EM_USO.update(GATILHOS_GRUPOS)
@@ -5141,6 +5177,10 @@ def prompt_sistema():
         "Responda em português do Brasil, de forma curta e direta: o computador é "
         "lento, então cada palavra a mais demora. "
         f"Hoje é {data_hoje()}. A pasta pessoal do usuário é {HOME}. "
+        + (f"O nome do usuário é {NOME_USUARIO}: chame-o pelo nome de vez em quando, de forma "
+           "natural (por exemplo ao cumprimentar ou concluir uma tarefa), sem repetir em toda frase. "
+           "Se ele pedir para ser chamado de outro jeito, diga que é só usar o comando /nome. "
+           if NOME_USUARIO else "") +
         "Para saber a hora exata, use data_hora. "
         f"Você está na geração {GERACAO} do seu script. "
         "Use as ferramentas sempre que o pedido envolver o computador, arquivos, "

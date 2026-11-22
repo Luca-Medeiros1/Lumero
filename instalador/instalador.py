@@ -63,6 +63,7 @@ def info():
     analise_bateria = HW.tem_bateria()
     return {
         "so": SO, "versao": VERSAO, "pacote": PACOTE, "usuario": getpass.getuser(),
+        "nome": HW.nome_sugerido(),
         "opcoes": {
             "bloquear": SO in ("linux", "windows"),
             "eco": SO == "linux" and analise_bateria,
@@ -209,26 +210,19 @@ def instalar(op):
                 else:
                     mensagem = next((l for l in reversed(ultimas) if l), "") or f"O instalador parou (código {codigo})."
                 break
-        if sucesso and PACOTE and op.get("modelos"):
-            gravar_modelo_padrao(op["modelos"][0])
+        if sucesso:
+            valores = {}
+            nome = HW.limpar_nome(op.get("nome"))
+            if nome:
+                valores["NOME_USUARIO"] = nome
+            if PACOTE and op.get("modelos"):
+                valores["MODELO"] = op["modelos"][0]
+            if valores:
+                HW.gravar_config(**valores)
     except Exception as erro:
         sucesso, mensagem = False, f"Erro inesperado: {erro}"
     ESTADO.update(ocupado=False, terminou=True, sucesso=sucesso)
     evento("fim", sucesso=sucesso, mensagem=mensagem)
-
-
-def gravar_modelo_padrao(modelo):
-    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    arquivo = os.path.join(base, "lumero", "config.json")
-    try:
-        with open(arquivo, encoding="utf-8") as f:
-            dados = json.load(f)
-    except (OSError, ValueError):
-        dados = {}
-    dados["MODELO"] = modelo
-    os.makedirs(os.path.dirname(arquivo), exist_ok=True)
-    with open(arquivo, "w", encoding="utf-8") as f:
-        json.dump(dados, f, indent=2, ensure_ascii=False)
 
 
 def abrir_lumero():

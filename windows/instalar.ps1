@@ -278,6 +278,16 @@ if (-not (Ollama-Responde)) { Write-Host '    O Ollama não respondeu. Abra o Ol
 
 # só o processador? (a análise do computador recomenda quando a placa é pequena)
 $hardware = Join-Path $Raiz 'instalador\hardware.py'
+$env:PYTHONIOENCODING = 'utf-8'
+if (-not $NaoInterativo) {
+    $nome = ''
+    try { $nome = (& $Py $hardware --nome | Out-String).Trim() } catch {}
+    if (-not $Sim) {
+        $r = Read-Host "    Como você quer que o Lumero te chame? [$(if ($nome) { $nome } else { 'sem nome' })]"
+        if ($r) { $nome = $r.Trim() }
+    }
+    if ($nome) { try { & $Py $hardware --gravar-nome $nome | Out-Null } catch {} }
+}
 $analise = $null
 try { $analise = (& $Py $hardware --json) | ConvertFrom-Json } catch {}
 if (-not $NaoInterativo -and $analise -and $analise.pode_forcar_cpu) {

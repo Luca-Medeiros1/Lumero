@@ -57,6 +57,12 @@ footer .info { color: var(--fraco); font-size: 13px; flex: 1; }
 .recurso { padding: 12px 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--painel); font-size: 14px; }
 .recurso b { display: block; margin-bottom: 2px; }
 .recurso small { color: var(--suave); }
+.campo-nome { max-width: 420px; margin: 26px auto 0; text-align: left; }
+.campo-nome label { display: block; font-weight: 600; margin-bottom: 6px; }
+.campo-nome input { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--borda); background: var(--painel);
+  color: var(--texto); font: inherit; font-size: 16px; outline: none; }
+.campo-nome input:focus { border-color: var(--ouro); }
+.campo-nome small { display: block; color: var(--fraco); margin-top: 6px; font-size: 13px; }
 
 /* análise */
 .cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
@@ -166,6 +172,11 @@ summary { cursor: pointer; padding: 10px 14px; color: var(--suave); font-size: 1
       <div class="recurso"><b>🧠 Feita para o seu computador</b><small>Vamos analisar o hardware e indicar os modelos certos.</small></div>
       <div class="recurso"><b>🛠️ Faz coisas de verdade</b><small>Abre programas, organiza arquivos, cria lembretes e mais.</small></div>
       <div class="recurso"><b>✋ Você no controle</b><small>Ações importantes sempre pedem a sua permissão.</small></div>
+    </div>
+    <div class="campo-nome">
+      <label for="nome">Como você quer que o Lumero te chame?</label>
+      <input id="nome" maxlength="40" autocomplete="given-name" placeholder="Seu nome ou apelido">
+      <small>Ele usa o seu nome nas conversas. Dá para trocar depois com o comando /nome.</small>
     </div>
     <p class="sub" style="margin-top:22px;font-size:13px">A instalação precisa de internet para baixar o Ollama e os modelos.</p>
   </section>
@@ -415,7 +426,7 @@ async function instalar() {
   }
   $("#aviso-senha").style.display = estado.info.so === "linux" ? "block" : "none";
   const dados = { modelos: estado.analise.modelos.filter(m => estado.modelos.has(m.nome)).map(m => m.nome),
-                  so_cpu: estado.soCpu, eco: estado.eco, ...estado.opcoes };
+                  so_cpu: estado.soCpu, eco: estado.eco, nome: $("#nome").value.trim(), ...estado.opcoes };
   try { await api("/api/instalar", dados); } catch (e) { fim(false, e.message); }
 }
 function fim(sucesso, mensagem) {
@@ -423,7 +434,8 @@ function fim(sucesso, mensagem) {
   if (sucesso) document.querySelectorAll("#passos li").forEach(x => { if (!x.classList.contains("feito")) { x.className = "feito"; x.querySelector(".est").textContent = "✓"; } });
   const final = $("#p6"); final.className = "pagina final " + (sucesso ? "ok" : "falhou");
   $("#final-icone").textContent = sucesso ? "✓" : "!";
-  $("#final-titulo").textContent = sucesso ? "O Lumero está pronto!" : "A instalação não terminou";
+  const nome = $("#nome").value.trim();
+  $("#final-titulo").textContent = sucesso ? (nome ? `Tudo pronto, ${nome}!` : "O Lumero está pronto!") : "A instalação não terminou";
   const so = estado.info.so;
   $("#final-texto").textContent = sucesso
     ? (so === "windows" ? "Procure \"Lumero\" no menu Iniciar ou aperte Ctrl+Alt+A." : so === "mac" ? "O Lumero está em Aplicativos (procure no Spotlight com Cmd+Espaço)." : "Procure \"Lumero\" no menu de aplicativos ou aperte Ctrl+Alt+A.")
@@ -477,6 +489,8 @@ setInterval(() => api("/api/vivo", {}).catch(() => {}), 20000);
   if (!TOKEN) { document.body.innerHTML = "<p style='padding:40px'>Abra o instalador pelo script de instalação.</p>"; return; }
   estado.info = await api("/api/info");
   estado.eco = !!estado.info.opcoes.eco;
+  $("#nome").value = estado.info.nome || "";
+  $("#nome").addEventListener("keydown", e => { if (e.key === "Enter") $("#avancar").click(); });
   if (estado.info.so === "windows") estado.opcoes.extras = true;
   conectar();
   irPara(1);

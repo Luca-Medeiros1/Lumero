@@ -204,6 +204,14 @@ if ! curl -fs "$API/api/version" >/dev/null 2>&1; then
     SERVE_PID=$!
 fi
 esperar_ollama || { echo "O Ollama não respondeu. Tente: ollama serve"; exit 1; }
+if [ "$NAO_INTERATIVO" != 1 ]; then
+    NOME="$("$PY" "$RAIZ/instalador/hardware.py" --nome 2>/dev/null)"
+    if [ "$SIM" != 1 ]; then
+        read -r -p "    Como você quer que o Lumero te chame? [${NOME:-sem nome}]: " resp </dev/tty || resp=""
+        [ -n "$resp" ] && NOME="$resp"
+    fi
+    [ -n "$NOME" ] && "$PY" "$RAIZ/instalador/hardware.py" --gravar-nome "$NOME" >/dev/null
+fi
 if [ "$MODELOS_ARG" = "-" ]; then   # Terminal: mostra a análise e pergunta
     ANALISE="$("$PY" "$RAIZ/instalador/hardware.py" --json)"
     "$PY" "$RAIZ/instalador/hardware.py"

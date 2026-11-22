@@ -592,6 +592,7 @@ COMANDOS_JANELA = [
     ("/pensar", "raciocínio: auto, sempre ou nunca"),
     ("/pensamento", "mostra o raciocínio da última resposta"),
     ("/modelo", "mostra ou troca o modelo"),
+    ("/nome", "mostra ou troca o nome pelo qual o Lumero te chama"),
     ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
     ("/extras", "grupos de ferramentas extras"),
     ("/memoria", "o que a IA lembra sobre você"),
@@ -792,6 +793,13 @@ def comando_janela(texto):
             r["texto"] = f"Modelo trocado para **{arg}**."
         else:
             r["texto"] = f"Modelo: **{L.MODELO}**\n\nInstalados: " + (", ".join(f"`{m}`" for m in modelos_instalados()) or "nenhum")
+    elif cmd == "/nome":
+        if arg:
+            L.trocar_nome(arg)
+            r["texto"] = f"Certo, vou te chamar de **{L.NOME_USUARIO}**." if L.NOME_USUARIO else "Nome apagado."
+        else:
+            r["texto"] = (f"Eu te chamo de **{L.NOME_USUARIO}**." if L.NOME_USUARIO else "Ainda não sei o seu nome.") + \
+                " Para trocar: `/nome Seu Nome` (ou `/nome apagar`)."
     elif cmd == "/estado":
         r["texto"] = "```\n" + L.estado_do_pc() + "\n```"
     elif cmd == "/extras":
@@ -876,7 +884,7 @@ def estado():
             "ollama_erro": ESTADO["ollama_erro"], "conversa": conversa_atual().id,
             "titulo": conversa_atual().titulo, "so": L.SO,
             "contexto": min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO))),
-            "tema": tema_escolhido(), "tema_sistema": tema_do_sistema(),
+            "tema": tema_escolhido(), "nome": L.NOME_USUARIO, "tema_sistema": tema_do_sistema(),
             "proxima": L.CONTEXTO_SUGESTAO["proxima"]}
 
 

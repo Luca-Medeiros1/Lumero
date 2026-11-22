@@ -703,7 +703,8 @@ async function carregarEstado() {
   if (e.ollama_erro !== null || e.modelos.length) mostrarOllama(e.ollama_erro);
   $("#contexto").textContent = e.contexto ? `contexto ${e.contexto}%` : "";
   const hora = new Date().getHours();
-  $("#saudacao").textContent = hora < 12 ? "Bom dia! Como posso ajudar?" : hora < 18 ? "Boa tarde! Como posso ajudar?" : "Boa noite! Como posso ajudar?";
+  const periodo = hora < 5 ? "Boa noite" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  $("#saudacao").textContent = `${periodo}${e.nome ? ", " + e.nome : ""}! Como posso ajudar?`;
   document.documentElement.dataset.so = e.so;
 }
 
@@ -757,6 +758,7 @@ async function rodarComando(texto) {
     const e = r.estado;
     preencherModelos(e.modelos, e.modelo); $("#pensar").value = e.pensar;
     $("#falar").classList.toggle("ligado", e.falar); aplicarTema(e.tema, e.tema_sistema);
+    carregarEstado().catch(() => {});
     $("#contexto").textContent = e.contexto ? `contexto ${e.contexto}%` : "";
   }
   rolarFim(true); entrada.focus(); pedirSugestoes();

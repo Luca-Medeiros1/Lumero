@@ -483,7 +483,76 @@ def resumo_texto(analise):
     return "\n".join(linhas)
 
 
+# ----------------------------------------------------------------------------- nome e config
+def pasta_dados():
+    casa = os.path.expanduser("~")
+    if SO == "windows":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.join(casa, "AppData", "Local"), "Lumero")
+    if SO == "mac":
+        return os.path.join(casa, "Library", "Application Support", "Lumero")
+    return os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(casa, ".local", "share"), "lumero")
+
+
+def ler_config():
+    try:
+        with open(os.path.join(pasta_dados(), "config.json"), encoding="utf-8") as f:
+            dados = json.load(f)
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def gravar_config(**valores):
+    dados = ler_config()
+    dados.update(valores)
+    os.makedirs(pasta_dados(), exist_ok=True)
+    with open(os.path.join(pasta_dados(), "config.json"), "w", encoding="utf-8") as f:
+        json.dump(dados, f, indent=2, ensure_ascii=False)
+
+
+def limpar_nome(nome):
+    nome = re.sub(r"[^\w\s'.-]", "", str(nome or ""), flags=re.UNICODE)
+    return re.sub(r"\s+", " ", nome).strip()[:40]
+
+
+def nome_sugerido():
+    """O nome já gravado, ou o primeiro nome da conta do sistema."""
+    gravado = limpar_nome(ler_config().get("NOME_USUARIO"))
+    if gravado:
+        return gravado
+    completo = ""
+    try:
+        if SO == "windows":
+            import ctypes
+            tamanho = ctypes.c_ulong(0)
+            ctypes.windll.secur32.GetUserNameExW(3, None, ctypes.byref(tamanho))
+            buf = ctypes.create_unicode_buffer(tamanho.value or 256)
+            if ctypes.windll.secur32.GetUserNameExW(3, buf, ctypes.byref(tamanho)):
+                completo = buf.value
+        elif SO == "mac":
+            completo = subprocess.run(["id", "-F"], capture_output=True, text=True, timeout=3).stdout
+        else:
+            import pwd
+            completo = pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0]
+    except Exception:
+        pass
+    if not limpar_nome(completo):
+        completo = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+        completo = completo if completo.isalpha() else ""
+    primeiro = (limpar_nome(completo).split() or [""])[0]
+    return primeiro[:1].upper() + primeiro[1:]
+
+
 if __name__ == "__main__":
+    if "--nome" in sys.argv:
+        print(nome_sugerido())
+        sys.exit(0)
+    if "--gravar-nome" in sys.argv:
+        nome = limpar_nome(sys.argv[sys.argv.index("--gravar-nome") + 1] if sys.argv[-1] != "--gravar-nome" else "")
+        if nome:
+            gravar_config(NOME_USUARIO=nome)
+        print(nome)
+        sys.exit(0)
     forcar = "--so-cpu" in sys.argv
     analise = analisar(forcar_cpu=forcar)
     if "--json" in sys.argv:

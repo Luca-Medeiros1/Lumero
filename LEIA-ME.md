@@ -98,6 +98,8 @@ O instalador:
 - instala o que falta: Python, Ollama, ffmpeg, 7-Zip, git. No Mac usa o Homebrew, no
   Windows usa o winget e no Linux usa o gerenciador da sua distribuição;
 - cria o atalho no menu (Ctrl+Alt+A no GNOME e no Windows), o comando `lumero` e o ícone;
+- pergunta como você quer ser chamado: o Lumero usa o seu nome nas conversas (troque depois
+  com `/nome`);
 - analisa o computador, diz se a IA vai rodar na placa de vídeo, no processador ou nos dois e
   mostra os modelos que cabem, com um recomendado;
 - oferece bloquear a internet do Ollama. No Linux isso é feito pelo systemd e no

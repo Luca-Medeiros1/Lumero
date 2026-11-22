@@ -50,6 +50,13 @@ pergunta() {  # pergunta "texto" padrão(s/n) -> 0 = sim
 passo() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
 command -v python3 >/dev/null || { echo "Instale o python3 e rode de novo."; exit 1; }
 
+NOME="$(python3 "$RAIZ/instalador/hardware.py" --nome 2>/dev/null)"
+if [[ $SIM != 1 ]]; then
+    echo
+    read -r -p "Como você quer que o Lumero te chame? [${NOME:-sem nome}]: " resp </dev/tty || resp=""
+    [[ -n "$resp" ]] && NOME="$resp"
+fi
+
 passo "1/4 Analisando o computador"
 ANALISE="$(python3 "$RAIZ/instalador/hardware.py" --json)"
 campo() { python3 -c "import json,sys; d=json.loads(sys.argv[1]); print($2)" "$ANALISE"; }
@@ -106,9 +113,10 @@ sudo bash "$RAIZ/linux/raiz.sh" --usuario "$USER" --pacotes 1 --voz "$VOZ" --oll
 passo "4/4 Lumero"
 PRIMEIRO="$(echo $MODELOS | awk '{print $1}')"
 bash "$RAIZ/linux/usuario.sh" --modelo "$PRIMEIRO" --voz "$VOZ" | grep -v '^##'
+[[ -n "$NOME" ]] && python3 "$RAIZ/instalador/hardware.py" --gravar-nome "$NOME" >/dev/null
 
 echo
-printf '\033[1;32m✓ Lumero instalado!\033[0m\n'
+printf '\033[1;32m✓ Lumero instalado%s!\033[0m\n' "${NOME:+, $NOME}"
 echo "  • Procure \"Lumero\" no menu de aplicativos ou aperte Ctrl+Alt+A (GNOME): abre a janela de chat."
 echo "  • Prefere o terminal? Digite  lumero  (num terminal novo) ou clique com o botão"
 echo "    direito no ícone do Lumero → Abrir no terminal."
