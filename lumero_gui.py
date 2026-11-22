@@ -545,8 +545,16 @@ def turno(texto, anexos):
             if not mensagens[-1].get("content"):
                 mensagens.append({"role": "assistant", "content": "(resposta interrompida pelo usuário)"})
             evento("aviso", texto="Interrompido.")
-        elif L.FALAR_RESPOSTAS["ligado"] and resposta.get("content"):
-            L.falar(resposta["content"])
+        else:
+            usadas = []
+            for m in reversed(mensagens):
+                if m.get("role") == "user":
+                    break
+                if m.get("role") == "tool" and m.get("tool_name"):
+                    usadas.insert(0, m["tool_name"])
+            L.preparar_sugestao(resposta.get("content") or "", usadas)
+            if L.FALAR_RESPOSTAS["ligado"] and resposta.get("content"):
+                L.falar(resposta["content"])
         if L.REINICIAR["pendente"]:
             evento("aviso", texto="O Lumero alterou o próprio código. Feche e abra de novo para aplicar.")
     except urllib.error.URLError:
@@ -569,7 +577,285 @@ def turno(texto, anexos):
             pass
         ESTADO["ocupado"] = False
         uso = min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO)))
-        evento("fim", id=conversa.id, titulo=conversa.titulo, contexto=uso)
+        evento("fim", id=conversa.id, titulo=conversa.titulo, contexto=uso,
+               proxima=L.CONTEXTO_SUGESTAO["proxima"])
+
+
+
+# ============================================================================
+# Comandos com / e sugestões na caixa de texto
+# ============================================================================
+COMANDOS_JANELA = [
+    ("/ajuda", "mostra os comandos e atalhos"),
+    ("/nova", "começa uma conversa nova"),
+    ("/ferramentas", "lista o que a IA consegue fazer"),
+    ("/pensar", "raciocínio: auto, sempre ou nunca"),
+    ("/pensamento", "mostra o raciocínio da última resposta"),
+    ("/modelo", "mostra ou troca o modelo"),
+    ("/estado", "temperatura, bateria, CPU/RAM e uso da IA"),
+    ("/extras", "grupos de ferramentas extras"),
+    ("/memoria", "o que a IA lembra sobre você"),
+    ("/contexto", "quanto da memória da conversa já foi usado"),
+    ("/compactar", "resume a conversa para liberar memória"),
+    ("/conversas", "lista as conversas salvas"),
+    ("/retomar", "abre uma conversa salva (sem nada: a última)"),
+    ("/ouvir", "liga/desliga a leitura das respostas em voz alta"),
+    ("/tema", "aparência: automático, claro ou escuro"),
+]
+APELIDOS = {"/limpar": "/nova", "/clear": "/nova", "/help": "/ajuda", "/memória": "/memoria"}
+TEMAS = {"auto": "automático (igual ao sistema)", "claro": "claro", "escuro": "escuro"}
+_HISTORICO = {"lista": None}
+
+
+def ler_config():
+    try:
+        with open(L.ARQ_CONFIG, encoding="utf-8") as f:
+            dados = json.load(f)
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def tema_escolhido():
+    tema = ler_config().get("TEMA", "auto")
+    return tema if tema in TEMAS else "auto"
+
+
+def tema_do_sistema():
+    """'claro', 'escuro' ou None (a página usa o que o navegador disser)."""
+    try:
+        if L.EH_WINDOWS:
+            import winreg
+            chave = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                   r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            return "claro" if winreg.QueryValueEx(chave, "AppsUseLightTheme")[0] else "escuro"
+        if L.EH_MAC:
+            r = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"],
+                               capture_output=True, text=True, timeout=2)
+            return "escuro" if "dark" in r.stdout.lower() else "claro"
+        mesa = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+        if shutil.which("gsettings") and any(m in mesa for m in ("gnome", "unity", "cinnamon", "budgie", "pantheon", "mate")):
+            r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                               capture_output=True, text=True, timeout=2)
+            if "dark" in r.stdout:
+                return "escuro"
+            if "light" in r.stdout:
+                return "claro"
+            r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+                               capture_output=True, text=True, timeout=2)
+            if r.returncode == 0 and r.stdout.strip():
+                return "escuro" if "dark" in r.stdout.lower() else "claro"
+    except Exception:
+        pass
+    return None
+
+
+def historico():
+    """Mensagens já enviadas, da mais recente para a mais antiga (para as sugestões)."""
+    if _HISTORICO["lista"] is None:
+        textos = []
+        for item in reversed(lista_conversas()[:60]):
+            try:
+                with open(os.path.join(PASTA_CONVERSAS_GUI, item["id"] + ".json"), encoding="utf-8") as f:
+                    for m in json.load(f).get("mensagens", []):
+                        if m.get("role") == "user" and m.get("_texto"):
+                            textos.append(m["_texto"])
+            except (OSError, ValueError):
+                continue
+        try:  # o que foi digitado no terminal também vale
+            with open(os.path.join(L.PASTA_DADOS, "historico-linha"), encoding="utf-8") as f:
+                linhas = [ln[1:].rstrip("\n") for ln in f if ln.startswith("+")]
+            textos = linhas[-300:] + textos
+        except OSError:
+            pass
+        _HISTORICO["lista"] = []
+        for t in reversed(textos):
+            lembrar_mensagem(t, no_fim=True)
+    return _HISTORICO["lista"]
+
+
+def lembrar_mensagem(texto, no_fim=False):
+    texto = (texto or "").strip()
+    if not texto or "\n" in texto or texto.startswith("/") or len(texto) > 200:
+        return
+    lista = _HISTORICO["lista"] if _HISTORICO["lista"] is not None else historico()
+    if texto in lista:
+        if no_fim:
+            return
+        lista.remove(texto)
+    if no_fim:
+        lista.append(texto)
+    else:
+        lista.insert(0, texto)
+    del lista[500:]
+
+
+def opcoes_janela(comando):
+    if comando == "/tema":
+        return list(TEMAS.items())
+    if comando == "/retomar":
+        return [(c["id"], c["titulo"][:50]) for c in lista_conversas()[:15]]
+    if comando == "/modelo":
+        return [(m, "instalado") for m in modelos_instalados()]
+    if comando in ("/pensar", "/extras"):
+        return L.opcoes_do_comando(comando)
+    return []
+
+
+def completar_janela(texto):
+    """Itens do menu: {texto, substituir, descricao}."""
+    itens = []
+    if texto.startswith("/"):
+        if " " not in texto:
+            itens = [(c, len(texto), d) for c, d in COMANDOS_JANELA if c.startswith(texto.lower())]
+        else:
+            comando, argumento = texto.split(" ", 1)
+            comando = APELIDOS.get(comando.lower(), comando.lower())
+            itens = [(o, len(argumento), d) for o, d in opcoes_janela(comando)
+                     if L.sem_acento(o).startswith(L.sem_acento(argumento))]
+    else:
+        try:
+            itens = L.completar(texto)
+        except Exception:
+            itens = []
+    return [{"texto": t, "substituir": n, "descricao": d} for t, n, d in itens[:40]]
+
+
+def sugerir_janela(texto):
+    if texto.startswith("/"):
+        if " " in texto:
+            return ""
+        opcoes = completar_janela(texto)
+        return opcoes[0]["texto"][len(texto):] if len(opcoes) == 1 else ""
+    try:
+        return L.sugerir(texto, historico())
+    except Exception:
+        return ""
+
+
+AJUDA_JANELA = """**Comandos** (digite `/` para ver o menu):
+
+{comandos}
+
+**Atalhos**
+
+- **Tab** ou **→** aceita a sugestão em cinza; **↑ ↓** escolhem no menu
+- **Shift+Enter** pula linha; **Esc** para a resposta
+- **Ctrl+Shift+O** abre uma conversa nova
+- comece com **!** para forçar a IA a pensar (ex.: `!qual o melhor jeito de...`)
+- digite `~/` para completar caminhos de pastas"""
+
+
+def comando_janela(texto):
+    """Roda um comando com /. Devolve o que a página deve mostrar ou fazer."""
+    partes = texto.split(maxsplit=1)
+    cmd = APELIDOS.get(partes[0].lower(), partes[0].lower())
+    arg = partes[1].strip() if len(partes) > 1 else ""
+    r = {"comando": True, "texto": ""}
+    if cmd == "/ajuda":
+        r["texto"] = AJUDA_JANELA.format(comandos="\n".join(f"- `{c}` {d}" for c, d in COMANDOS_JANELA))
+    elif cmd == "/nova":
+        if ESTADO["ocupado"]:
+            raise ValueError("espere a resposta terminar")
+        ATUAL["conversa"] = Conversa()
+        L.USO_CONTEXTO["tokens"] = 0
+        L.GRUPOS_EM_USO.clear()
+        r["acao"] = "recarregar"
+    elif cmd == "/ferramentas":
+        linhas = []
+        for nome, info in L.FERRAMENTAS.items():
+            desc = info["schema"]["function"]["description"].split(". ")[0]
+            grupo = info.get("grupo")
+            ligado = not grupo or grupo in L.GRUPOS_EM_USO
+            linhas.append(f"- {'●' if ligado else '○'} **{nome}**{f' [{grupo}]' if grupo else ''}: {desc}")
+        r["texto"] = "**Ferramentas** (○ = grupo extra, liga sozinho pelo assunto)\n\n" + "\n".join(linhas)
+    elif cmd == "/pensar":
+        opcoes = {"auto": "auto", "automatico": "auto", "sim": True, "ligado": True, "sempre": True,
+                  "nao": False, "desligado": False, "nunca": False}
+        if arg:
+            L.PENSAR = opcoes.get(L.sem_acento(arg.lower()), L.PENSAR)
+        else:
+            L.PENSAR = {"auto": True, True: False, False: "auto"}[L.PENSAR]
+        gravar_config(PENSAR=L.PENSAR)
+        r["texto"] = "Raciocínio: " + {True: "sempre pensa", False: "nunca pensa"}.get(L.PENSAR, "automático") + "."
+    elif cmd == "/pensamento":
+        p = L.ULTIMO_PENSAMENTO["texto"].strip()
+        r["texto"] = ("**Raciocínio da última resposta**\n\n" + p) if p else "Não há raciocínio salvo."
+    elif cmd == "/modelo":
+        if arg:
+            if arg not in modelos_instalados():
+                raise ValueError(f"o modelo {arg} não está instalado")
+            if L.MODELO_VISAO == L.MODELO:
+                L.MODELO_VISAO = arg
+            L.MODELO = arg
+            gravar_config(MODELO=arg)
+            r["texto"] = f"Modelo trocado para **{arg}**."
+        else:
+            r["texto"] = f"Modelo: **{L.MODELO}**\n\nInstalados: " + (", ".join(f"`{m}`" for m in modelos_instalados()) or "nenhum")
+    elif cmd == "/estado":
+        r["texto"] = "```\n" + L.estado_do_pc() + "\n```"
+    elif cmd == "/extras":
+        if arg in ("todos", "tudo"):
+            L.GRUPOS_EM_USO.update(L.GATILHOS_GRUPOS)
+        elif arg in L.GATILHOS_GRUPOS:
+            L.GRUPOS_EM_USO.add(arg)
+        elif arg:
+            raise ValueError(f"grupo desconhecido: {arg}")
+        r["texto"] = "**Grupos extras**\n\n" + "\n".join(
+            f"- {'● ligado' if g in L.GRUPOS_EM_USO else '○ desligado'} · **{g}**: {n}"
+            for g, n in L.NOMES_GRUPOS.items()) + "\n\nEles ligam sozinhos quando o assunto aparece. Use `/extras nome` ou `/extras todos`."
+    elif cmd == "/memoria":
+        r["texto"] = L.ver_memoria()
+    elif cmd == "/contexto":
+        uso = L.USO_CONTEXTO["tokens"]
+        r["texto"] = f"Contexto: {uso} de {L.CONTEXTO} tokens ({100 * uso // max(1, L.CONTEXTO)}%). A conversa é resumida sozinha ao passar de 70%."
+    elif cmd == "/compactar":
+        if ESTADO["ocupado"]:
+            raise ValueError("espere a resposta terminar")
+        conversa = conversa_atual()
+        if not L.resumir_conversa(conversa.mensagens):
+            r["texto"] = "A conversa ainda é curta, não precisa resumir."
+        else:
+            L.USO_CONTEXTO["tokens"] = 0
+            conversa.salvar()
+            r["texto"] = "Conversa resumida."
+            r["acao"] = "recarregar"
+    elif cmd == "/conversas":
+        itens = lista_conversas()[:20]
+        r["texto"] = ("**Conversas salvas** (abra com `/retomar` ou pela lista ao lado)\n\n" + "\n".join(
+            f"- {c['titulo']}" for c in itens)) if itens else "Nenhuma conversa salva."
+    elif cmd == "/retomar":
+        if ESTADO["ocupado"]:
+            raise ValueError("espere a resposta terminar")
+        itens = lista_conversas()
+        alvo = next((c for c in itens if c["id"] == arg), None) if arg else (itens[0] if itens else None)
+        if not alvo and arg:
+            alvo = next((c for c in itens if L.sem_acento(arg.lower()) in L.sem_acento(c["titulo"].lower())), None)
+        if not alvo:
+            raise ValueError("não achei essa conversa")
+        ATUAL["conversa"] = Conversa.abrir(alvo["id"])
+        L.USO_CONTEXTO["tokens"] = 0
+        r["acao"] = "recarregar"
+    elif cmd == "/ouvir":
+        L.FALAR_RESPOSTAS["ligado"] = not L.FALAR_RESPOSTAS["ligado"]
+        if not L.FALAR_RESPOSTAS["ligado"]:
+            L.parar_fala()
+        r["texto"] = "Respostas em voz alta: " + ("ligado." if L.FALAR_RESPOSTAS["ligado"] else "desligado.")
+    elif cmd == "/tema":
+        alvo = L.sem_acento(arg.lower())
+        alvo = {"automatico": "auto", "sistema": "auto", "dark": "escuro", "light": "claro"}.get(alvo, alvo)
+        if alvo not in TEMAS:
+            alvo = {"auto": "claro", "claro": "escuro", "escuro": "auto"}[tema_escolhido()]
+        gravar_config(TEMA=alvo)
+        r["texto"] = f"Tema: {TEMAS[alvo]}."
+    elif cmd in ("/falar", "/sair", "/salvar"):
+        r["texto"] = {"/falar": "O microfone ainda não está na janela. Use o Lumero no terminal para falar.",
+                      "/sair": "Para sair, é só fechar a janela.",
+                      "/salvar": "As conversas da janela são salvas sozinhas."}[cmd]
+    else:
+        raise ValueError(f"comando desconhecido: {cmd}. Digite /ajuda")
+    r["estado"] = estado()
+    return r
 
 
 # ============================================================================
@@ -589,7 +875,9 @@ def estado():
             "falar": L.FALAR_RESPOSTAS["ligado"], "ocupado": ESTADO["ocupado"],
             "ollama_erro": ESTADO["ollama_erro"], "conversa": conversa_atual().id,
             "titulo": conversa_atual().titulo, "so": L.SO,
-            "contexto": min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO)))}
+            "contexto": min(100, round(100 * L.USO_CONTEXTO["tokens"] / max(1, L.CONTEXTO))),
+            "tema": tema_escolhido(), "tema_sistema": tema_do_sistema(),
+            "proxima": L.CONTEXTO_SUGESTAO["proxima"]}
 
 
 class Servidor(http.server.ThreadingHTTPServer):
@@ -655,6 +943,11 @@ class Pedido(http.server.BaseHTTPRequestHandler):
             return self._eventos()
         if caminho == "/api/estado":
             return self._responder(200, estado())
+        if caminho == "/api/completar":
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query, keep_blank_values=True)
+            texto = (query.get("texto") or [""])[0][:500]
+            return self._responder(200, {"texto": texto, "itens": completar_janela(texto),
+                                         "sugestao": sugerir_janela(texto)})
         if caminho == "/api/conversas":
             return self._responder(200, {"conversas": lista_conversas(),
                                          "atual": conversa_atual().id})
@@ -722,8 +1015,12 @@ class Pedido(http.server.BaseHTTPRequestHandler):
         anexos = dados.get("anexos") or []
         if not texto and not anexos:
             raise ValueError("mensagem vazia")
+        if not anexos and re.match(r"^/[^\s/]+(\s|$)", texto):
+            return comando_janela(texto)
         if ESTADO["ocupado"]:
             raise ValueError("o Lumero ainda está respondendo")
+        lembrar_mensagem(texto)
+        L.CONTEXTO_SUGESTAO["proxima"] = ""
         ESTADO["ocupado"] = True
         threading.Thread(target=turno, args=(texto or "O que você vê neste anexo?", anexos),
                          daemon=True).start()
@@ -796,6 +1093,10 @@ class Pedido(http.server.BaseHTTPRequestHandler):
         if "pensar" in dados:
             L.PENSAR = {"sempre": True, "nunca": False}.get(dados["pensar"], "auto")
             gravar_config(PENSAR=L.PENSAR)
+        if "tema" in dados:
+            if dados["tema"] not in TEMAS:
+                raise ValueError("tema inválido")
+            gravar_config(TEMA=dados["tema"])
         if "falar" in dados:
             L.FALAR_RESPOSTAS["ligado"] = bool(dados["falar"])
             if not L.FALAR_RESPOSTAS["ligado"]:

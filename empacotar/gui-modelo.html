@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lumero</title>
+<script>
+// aplica o último tema já na abertura (evita piscar)
+try { const t = localStorage.getItem("lumero-tema-efetivo"); if (t) document.documentElement.dataset.tema = t; } catch (e) {}
+if (!document.documentElement.dataset.tema)
+  document.documentElement.dataset.tema = matchMedia("(prefers-color-scheme: light)").matches ? "claro" : "escuro";
+</script>
 <link rel="icon" href="data:image/svg+xml;base64,__ICONE__">
 <style>
 :root {
@@ -13,14 +19,14 @@
   --perigo: #e5604f; --ok: #6cbf73; --codigo: #151514; --sombra: 0 10px 30px rgba(0,0,0,.35);
   --link: #f0c75e;
 }
-@media (prefers-color-scheme: light) {
-  :root {
+:root { color-scheme: dark; }
+:root[data-tema="claro"] {
+    color-scheme: light;
     --fundo: #faf9f6; --lateral: #f1efea; --painel: #ffffff; --painel-2: #f4f2ed;
     --borda: #e2dfd7; --texto: #1f1e1b; --suave: #66645d; --fraco: #9a978e;
     --balao: #efece5; --ouro: #e0a91c; --ouro-escuro: #b8860b; --ouro-texto: #1d1606;
     --perigo: #c8412f; --ok: #3d8b45; --codigo: #f6f4ef; --sombra: 0 10px 30px rgba(60,50,20,.12);
     --link: #9a6c00;
-  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -113,6 +119,33 @@ body.vazio #inicio { display: flex; }
 .msg.lumero { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; }
 .msg.lumero > img { width: 30px; height: 30px; margin-top: 1px; }
 .corpo { min-width: 0; }
+/* menu de tema */
+.menu-tema { position: relative; }
+#opcoes-tema { display: none; position: absolute; right: 0; top: 40px; z-index: 30; min-width: 250px; padding: 6px;
+  background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; box-shadow: var(--sombra); }
+#opcoes-tema.aberto { display: block; }
+#opcoes-tema .titulo-menu { font-size: 12px; color: var(--fraco); padding: 4px 10px 6px; }
+#opcoes-tema button { white-space: nowrap; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; text-align: left; font-size: 14px; }
+#opcoes-tema button:hover { background: var(--painel-2); }
+#opcoes-tema button .certo { margin-left: auto; color: var(--ouro); visibility: hidden; }
+#opcoes-tema button.escolhido .certo { visibility: visible; }
+/* sugestão em cinza e menu de comandos */
+.campo { position: relative; }
+#fantasma { position: absolute; inset: 0; pointer-events: none; padding: 4px 4px 2px; line-height: 1.5; font-size: 15.5px;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; color: transparent; overflow: hidden; }
+#fantasma .resto { color: var(--fraco); }
+#fantasma .tecla { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid var(--borda); border-radius: 5px; font-size: 11px; line-height: 17px; color: var(--fraco); vertical-align: 1px; }
+#entrada { position: relative; }
+#caixa { position: relative; }
+#menu-cmd { display: none; position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 25; max-height: 300px; overflow-y: auto;
+  background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra); padding: 6px; }
+#menu-cmd.aberto { display: block; }
+#menu-cmd .item { display: flex; gap: 12px; align-items: baseline; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+#menu-cmd .item.ativo { background: color-mix(in srgb, var(--ouro) 16%, var(--painel)); }
+#menu-cmd .item b { font-weight: 600; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13.5px; white-space: nowrap; }
+#menu-cmd .item span { color: var(--suave); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu-cmd .rodape-menu { font-size: 11.5px; color: var(--fraco); padding: 6px 10px 2px; border-top: 1px solid var(--borda); margin-top: 4px; }
+.balao.comando { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 14px; }
 .aviso { text-align: center; color: var(--fraco); font-size: 13px; margin: 14px 0; }
 .aviso.erro { color: var(--perigo); }
 
@@ -264,6 +297,17 @@ body.vazio #inicio { display: flex; }
     <button class="botao-icone" id="falar" title="Ler as respostas em voz alta">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
     </button>
+    <div class="menu-tema">
+      <button class="botao-icone" id="tema" title="Aparência">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg>
+      </button>
+      <div id="opcoes-tema">
+        <div class="titulo-menu">Aparência</div>
+        <button data-tema="auto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg>Automático (igual ao sistema)<span class="certo">✓</span></button>
+        <button data-tema="claro"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Claro<span class="certo">✓</span></button>
+        <button data-tema="escuro"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Escuro<span class="certo">✓</span></button>
+      </div>
+    </div>
   </header>
 
   <div id="rolagem">
@@ -284,7 +328,11 @@ body.vazio #inicio { display: flex; }
     <div id="faixa"></div>
     <div id="caixa">
       <div id="pendentes"></div>
-      <textarea id="entrada" rows="1" placeholder="Mensagem para o Lumero" autofocus></textarea>
+      <div id="menu-cmd" role="listbox"></div>
+      <div class="campo">
+        <div id="fantasma" aria-hidden="true"></div>
+        <textarea id="entrada" rows="1" placeholder="Mensagem para o Lumero (digite / para os comandos)" autofocus></textarea>
+      </div>
       <div class="linha-caixa">
         <button class="botao-icone" id="anexar" title="Anexar imagem ou arquivo">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg>
@@ -621,8 +669,33 @@ function preencherModelos(lista, escolhido) {
   if (!nomes.includes(escolhido)) { const o = el("option", "", escolhido + " (não instalado)"); o.value = escolhido; s.append(o); }
   s.value = escolhido;
 }
+/* ------------------------------------------------------------------ tema */
+let temaEscolhido = "auto", temaSistema = null;
+const midiaClaro = matchMedia("(prefers-color-scheme: light)");
+function aplicarTema(escolhido, sistema) {
+  if (escolhido) temaEscolhido = escolhido;
+  if (sistema !== undefined) temaSistema = sistema;
+  const efetivo = temaEscolhido !== "auto" ? temaEscolhido : (temaSistema || (midiaClaro.matches ? "claro" : "escuro"));
+  document.documentElement.dataset.tema = efetivo;
+  try { localStorage.setItem("lumero-tema-efetivo", efetivo); } catch (e) {}
+  document.querySelectorAll("#opcoes-tema button").forEach(b => b.classList.toggle("escolhido", b.dataset.tema === temaEscolhido));
+  $("#tema").title = "Aparência: " + { auto: "automática", claro: "clara", escuro: "escura" }[temaEscolhido];
+}
+midiaClaro.addEventListener("change", () => aplicarTema());
+$("#tema").onclick = e => { e.stopPropagation(); $("#opcoes-tema").classList.toggle("aberto"); };
+document.addEventListener("click", e => { if (!e.target.closest(".menu-tema")) $("#opcoes-tema").classList.remove("aberto"); });
+document.querySelectorAll("#opcoes-tema button").forEach(b => b.onclick = async () => {
+  $("#opcoes-tema").classList.remove("aberto");
+  aplicarTema(b.dataset.tema);
+  try { const e = await api("/api/config", { tema: b.dataset.tema }); aplicarTema(e.tema, e.tema_sistema); }
+  catch (err) { aviso(err.message, true); }
+});
+window.addEventListener("focus", () => { if (temaEscolhido === "auto") api("/api/estado").then(e => aplicarTema(e.tema, e.tema_sistema)).catch(() => {}); });
+setInterval(() => { if (temaEscolhido === "auto" && document.hasFocus()) api("/api/estado").then(e => aplicarTema(e.tema, e.tema_sistema)).catch(() => {}); }, 15000);
+
 async function carregarEstado() {
   const e = await api("/api/estado");
+  aplicarTema(e.tema, e.tema_sistema);
   preencherModelos(e.modelos, e.modelo);
   $("#pensar").value = e.pensar;
   $("#falar").classList.toggle("ligado", e.falar);
@@ -660,7 +733,7 @@ function conectar() {
         if (atual) { encerrarTexto(atual); fecharPensamento(atual); if (!atual.corpo.children.length || atual.corpo.children.length === 1) atual.el.remove(); }
         atual = null; mostrarStatus(""); definirOcupado(false);
         $("#contexto").textContent = ev.contexto ? `contexto ${ev.contexto}%` : "";
-        conversaAtual = ev.id; carregarLista(); entrada.focus();
+        conversaAtual = ev.id; carregarLista(); entrada.focus(); pedirSugestoes();
         break;
     }
     rolarFim();
@@ -670,10 +743,30 @@ function conectar() {
 }
 
 /* ------------------------------------------------------------------ enviar */
+const ehComando = t => /^\/[^\s\/]+(\s|$)/.test(t);
+async function rodarComando(texto) {
+  fecharMenu(); entrada.value = ""; ajustarAltura(); limparFantasma();
+  const m = msgUsuario(texto); m.querySelector(".balao").classList.add("comando");
+  rolarFim(true);
+  let r;
+  try { r = await api("/api/enviar", { texto, anexos: [] }); }
+  catch (e) { aviso(e.message, true); return; }
+  if (r.acao === "recarregar") { await carregarConversa(); carregarLista(); }
+  if (r.texto) { const b = novoLumero(); addTexto(b, r.texto, true); encerrarTexto(b); b.el.classList.add("resposta-comando"); }
+  if (r.estado) {
+    const e = r.estado;
+    preencherModelos(e.modelos, e.modelo); $("#pensar").value = e.pensar;
+    $("#falar").classList.toggle("ligado", e.falar); aplicarTema(e.tema, e.tema_sistema);
+    $("#contexto").textContent = e.contexto ? `contexto ${e.contexto}%` : "";
+  }
+  rolarFim(true); entrada.focus(); pedirSugestoes();
+}
 async function enviar(textoForcado) {
   if (ocupado) { api("/api/parar", {}).catch(() => {}); return; }
   const texto = (textoForcado != null ? textoForcado : entrada.value).trim();
   if (!texto && !pendentes.length) return;
+  if (ehComando(texto) && !pendentes.length) return rodarComando(texto);
+  fecharMenu(); limparFantasma();
   const anexos = pendentes.map(p => ({ nome: p.nome, tipo: p.tipo, dados: p.dados }));
   msgUsuario(texto, pendentes.map(p => ({ nome: p.nome, miniatura: p.previa })));
   entrada.value = ""; ajustarAltura(); pendentes = []; desenharPendentes();
@@ -683,10 +776,93 @@ async function enviar(textoForcado) {
   catch (e) { mostrarStatus(""); aviso(e.message, true); definirOcupado(false); }
 }
 function ajustarAltura() { entrada.style.height = "auto"; entrada.style.height = Math.min(entrada.scrollHeight, 240) + "px"; atualizarBotao(); }
-entrada.addEventListener("input", ajustarAltura);
+entrada.addEventListener("input", () => { ajustarAltura(); pedirSugestoes(); });
+
+/* ------------------------------------------------------------------ menu de comandos e sugestão em cinza */
+const menu = $("#menu-cmd"), fantasma = $("#fantasma");
+const PLACEHOLDER = entrada.placeholder;
+let itensMenu = [], ativo = 0, sugestao = "", pedido = 0, temporizador = null;
+const COM_OPCOES = ["/pensar", "/modelo", "/tema", "/extras", "/retomar"];
+function pedirSugestoes() {
+  clearTimeout(temporizador);
+  temporizador = setTimeout(async () => {
+    const texto = entrada.value, n = ++pedido;
+    if (texto.length > 400 || texto.includes("\n")) { fecharMenu(); limparFantasma(); return; }
+    let r;
+    try { r = await api("/api/completar?texto=" + encodeURIComponent(texto)); } catch (e) { return; }
+    if (n !== pedido || entrada.value !== texto) return;
+    const palavra = texto.split(" ").pop();
+    const mostrarMenu = r.itens.length && (texto.startsWith("/") || /^(~\/|\/)/.test(palavra))
+                        && !(r.itens.length === 1 && r.itens[0].texto === (texto.startsWith("/") && !texto.includes(" ") ? texto : palavra));
+    if (mostrarMenu) abrirMenu(r.itens); else fecharMenu();
+    mostrarFantasma(mostrarMenu ? "" : r.sugestao);
+  }, texto_rapido() ? 0 : 90);
+}
+function texto_rapido() { return entrada.value === "" || entrada.value === "/"; }
+function abrirMenu(itens) {
+  itensMenu = itens; ativo = 0; menu.innerHTML = "";
+  itens.forEach((it, i) => {
+    const d = el("div", "item" + (i === 0 ? " ativo" : "")); d.setAttribute("role", "option");
+    d.append(el("b", "", it.texto), el("span", "", it.descricao || ""));
+    d.onmousedown = ev => { ev.preventDefault(); ativo = i; aplicarItem(true); };
+    menu.append(d);
+  });
+  menu.append(el("div", "rodape-menu", "↑ ↓ escolher · Tab completar · Enter usar · Esc fechar"));
+  menu.classList.add("aberto");
+}
+function fecharMenu() { menu.classList.remove("aberto"); itensMenu = []; }
+function marcarAtivo(n) {
+  ativo = (n + itensMenu.length) % itensMenu.length;
+  menu.querySelectorAll(".item").forEach((x, i) => x.classList.toggle("ativo", i === ativo));
+  const a = menu.querySelectorAll(".item")[ativo]; if (a) a.scrollIntoView({ block: "nearest" });
+}
+function aplicarItem(executar) {
+  const it = itensMenu[ativo]; if (!it) return;
+  const antes = entrada.value.slice(0, entrada.value.length - it.substituir);
+  let novo = antes + it.texto;
+  const ehCmd = novo.startsWith("/") && !novo.includes(" ");
+  if (ehCmd && COM_OPCOES.includes(novo)) { novo += " "; executar = false; }
+  entrada.value = novo; ajustarAltura(); fecharMenu();
+  entrada.setSelectionRange(novo.length, novo.length);
+  if (executar && ehComando(novo)) { rodarComando(novo.trim()); return; }
+  pedirSugestoes();
+}
+function mostrarFantasma(resto) {
+  sugestao = resto || "";
+  const noFim = entrada.selectionStart === entrada.value.length && entrada.selectionEnd === entrada.value.length;
+  if (!sugestao || !noFim || entrada.scrollHeight > entrada.clientHeight + 2) { limparFantasma(); return; }
+  fantasma.innerHTML = "";
+  fantasma.append(document.createTextNode(entrada.value), el("span", "resto", sugestao), el("span", "tecla", "Tab"));
+  entrada.placeholder = entrada.value ? PLACEHOLDER : "";
+}
+function limparFantasma() { sugestao = ""; fantasma.innerHTML = ""; entrada.placeholder = PLACEHOLDER; }
+function aceitarSugestao() {
+  entrada.value += sugestao; limparFantasma(); ajustarAltura();
+  entrada.setSelectionRange(entrada.value.length, entrada.value.length); pedirSugestoes();
+}
 entrada.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!ocupado) enviar(); }
+  if (e.isComposing) return;
+  if (menu.classList.contains("aberto") && itensMenu.length) {
+    if (e.key === "ArrowDown") { e.preventDefault(); return marcarAtivo(ativo + 1); }
+    if (e.key === "ArrowUp") { e.preventDefault(); return marcarAtivo(ativo - 1); }
+    if (e.key === "Tab") { e.preventDefault(); return aplicarItem(false); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); return aplicarItem(true); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return fecharMenu(); }
+  }
+  if (sugestao && (e.key === "Tab" || (e.key === "ArrowRight" && entrada.selectionStart === entrada.value.length))) {
+    e.preventDefault(); return aceitarSugestao();
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const t = entrada.value.trim();
+    if (ehComando(t) && !pendentes.length) rodarComando(t); else if (!ocupado) enviar();
+  }
 });
+entrada.addEventListener("keyup", e => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) mostrarFantasma(sugestao); });
+entrada.addEventListener("click", () => mostrarFantasma(sugestao));
+entrada.addEventListener("blur", () => setTimeout(fecharMenu, 120));
+entrada.addEventListener("focus", () => pedirSugestoes());
+entrada.addEventListener("scroll", () => { fantasma.scrollTop = entrada.scrollTop; });
 botaoEnviar.onclick = () => enviar();
 document.querySelectorAll(".sugestao").forEach(b => b.onclick = () => enviar(b.dataset.texto));
 

@@ -14,7 +14,11 @@ O Lumero abre numa **janela de chat**, parecida com a do Claude e a do ChatGPT. 
 - respostas formatadas, com tabelas e blocos de código com botão de copiar;
 - anexos de imagens e arquivos (é só arrastar ou colar);
 - os botões **Permitir** e **Negar** antes de qualquer ação arriscada;
-- a escolha do modelo e do raciocínio.
+- a escolha do modelo e do raciocínio;
+- os comandos com `/` (digite `/` para ver o menu: `/estado`, `/modelo`, `/tema`...);
+- sugestões em cinza enquanto você digita, tiradas das suas mensagens anteriores
+  (aceite com **Tab** ou **→**);
+- tema claro, escuro ou automático (igual ao sistema), no botão ◐ do canto.
 
 Quem prefere o terminal tem as mesmas ferramentas, com o comando `lumero`:
 
