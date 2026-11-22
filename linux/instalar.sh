@@ -40,7 +40,7 @@ passo() { printf '\n\033[1;33m==> %s\033[0m\n' "$*"; }
 aviso() { printf '    \033[33m⚠️  %s\033[0m\n' "$*"; }
 
 [[ $EUID -eq 0 ]] && { echo "Rode como o seu usuário normal (sem sudo). O instalador pede a senha quando precisar."; exit 1; }
-for arq in lumero.py assets/lumero.svg linux/configurar-ollama.sh; do
+for arq in lumero.py lumero_gui.py lumero_gui.html assets/lumero.svg linux/configurar-ollama.sh; do
     [[ -f "$RAIZ/$arq" ]] || { echo "Falta o arquivo $arq. Extraia o zip inteiro e rode de novo."; exit 1; }
 done
 
@@ -68,13 +68,13 @@ fi
 passo "2/7 Programas necessários (vai pedir sua senha)"
 case "$GER" in
     dnf)    PACOTES=(python3 python3-pip bubblewrap polkit curl zstd wl-clipboard xclip poppler-utils
-                     ffmpeg-free 7zip git python3-gobject libnotify) ;;
+                     ffmpeg-free 7zip git python3-gobject libnotify webkit2gtk4.1) ;;
     apt)    PACOTES=(python3 python3-venv python3-pip bubblewrap pkexec curl zstd wl-clipboard xclip
-                     poppler-utils ffmpeg 7zip git python3-gi libnotify-bin) ;;
+                     poppler-utils ffmpeg 7zip git python3-gi libnotify-bin gir1.2-webkit2-4.1) ;;
     pacman) PACOTES=(python python-pip bubblewrap polkit curl zstd wl-clipboard xclip poppler
-                     ffmpeg 7zip git python-gobject libnotify) ;;
+                     ffmpeg 7zip git python-gobject libnotify webkit2gtk-4.1) ;;
     zypper) PACOTES=(python3 python3-pip bubblewrap polkit curl zstd wl-clipboard xclip poppler-tools
-                     ffmpeg 7zip git python3-gobject libnotify-tools) ;;
+                     ffmpeg 7zip git python3-gobject libnotify-tools typelib-1_0-WebKit2-4_1) ;;
 esac
 instalar_pacotes() {
     case "$GER" in
@@ -131,6 +131,7 @@ else
     cp "$RAIZ/lumero.py" "$DADOS/lumero.py"
 fi
 cp "$RAIZ/assets/lumero.svg" "$DADOS/lumero.svg"
+cp "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$DADOS/"
 
 echo "    Criando o ambiente Python do Lumero..."
 PY="python3"
@@ -139,9 +140,19 @@ if python3 -m venv --system-site-packages "$DADOS/venv" >/dev/null 2>&1; then
     "$PY" -m pip install --quiet --disable-pip-version-check prompt_toolkit psutil pillow pypdf \
         || aviso "não consegui instalar algumas bibliotecas (sem internet?). O Lumero funciona com menos recursos."
     "$PY" -m pip install --quiet --disable-pip-version-check pillow-heif >/dev/null 2>&1 || true
+    # janela própria do chat (usa o WebKitGTK do sistema); sem ela, abre no navegador
+    "$PY" -m pip install --quiet --disable-pip-version-check pywebview >/dev/null 2>&1 \
+        || aviso "a janela própria não instalou: o chat vai abrir no navegador."
 else
     aviso "não consegui criar o ambiente Python (venv). Usando o Python do sistema."
 fi
+
+cat > "$BIN/lumero-gui" <<EOF
+#!/usr/bin/env bash
+# Abre o Lumero na janela de chat
+exec "$PY" "$DADOS/lumero_gui.py" "\$@"
+EOF
+chmod +x "$BIN/lumero-gui"
 
 cat > "$BIN/lumero" <<EOF
 #!/usr/bin/env bash
@@ -182,12 +193,18 @@ Type=Application
 Name=Lumero
 GenericName=Assistente de IA local
 Comment=IA local que pesquisa, acha arquivos e executa tarefas no computador
-Exec=$BIN/lumero-janela
+Exec=$BIN/lumero-gui
 Icon=lumero
 Terminal=false
 Categories=Utility;
 Keywords=lumero;ia;ai;ollama;assistente;chat;
 StartupNotify=true
+StartupWMClass=lumero
+Actions=terminal;
+
+[Desktop Action terminal]
+Name=Abrir no terminal
+Exec=$BIN/lumero-janela
 EOF
 update-desktop-database "$APPS" 2>/dev/null || true
 gtk-update-icon-cache -f -t "$ICONES" 2>/dev/null || true
@@ -217,12 +234,12 @@ if command -v gsettings >/dev/null && gsettings list-keys "$ESQ" >/dev/null 2>&1
     fi
     gsettings set "$ESQ" custom-keybindings "$atuais"
     gsettings set "$ESQ.custom-keybinding:$CAM" name "Lumero"
-    gsettings set "$ESQ.custom-keybinding:$CAM" command "$BIN/lumero-janela"
+    gsettings set "$ESQ.custom-keybinding:$CAM" command "$BIN/lumero-gui"
     gsettings set "$ESQ.custom-keybinding:$CAM" binding "$ATALHO"
     echo "    Ctrl+Alt+A abre o Lumero (muda em Configurações → Teclado → Atalhos)."
 else
     echo "    Seu ambiente não é o GNOME: crie o atalho nas configurações de teclado"
-    echo "    apontando para: $BIN/lumero-janela"
+    echo "    apontando para: $BIN/lumero-gui"
 fi
 
 # ----------------------------------------------------------------------------- 5
@@ -282,7 +299,8 @@ fi
 
 echo
 printf '\033[1;32m✓ Lumero instalado!\033[0m\n'
-echo "  • Procure \"Lumero\" no menu de aplicativos, aperte Ctrl+Alt+A (GNOME)"
-echo "    ou digite  lumero  num terminal (abra um terminal novo antes)."
+echo "  • Procure \"Lumero\" no menu de aplicativos ou aperte Ctrl+Alt+A (GNOME): abre a janela de chat."
+echo "  • Prefere o terminal? Digite  lumero  (num terminal novo) ou clique com o botão"
+echo "    direito no ícone do Lumero → Abrir no terminal."
 echo "  • O Ollama liga quando o Lumero abre e desliga quando você sai."
 echo "  • Configurações: $DADOS/config.json · Desinstalar: bash linux/desinstalar.sh"

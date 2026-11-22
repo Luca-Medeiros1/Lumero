@@ -15,10 +15,11 @@ echo "==> Lumero, atalhos e lembretes"
 systemctl --user disable --now 'lembrete-*.timer' 2>/dev/null
 rm -f "$HOME"/.config/systemd/user/lembrete-*
 systemctl --user daemon-reload 2>/dev/null
-rm -f "$BIN/lumero" "$BIN/lumero-janela" "$APPS/lumero.desktop" \
+pkill -f "$DADOS/lumero_gui.py" 2>/dev/null
+rm -f "$BIN/lumero" "$BIN/lumero-janela" "$BIN/lumero-gui" "$APPS/lumero.desktop" \
       "$ICONES/scalable/apps/lumero.svg" "$ICONES/256x256/apps/lumero.png"
 rm -rf "$DADOS/venv" "$DADOS/voz/piper-venv"
-rm -f "$DADOS/lumero.py" "$DADOS/lumero.svg"
+rm -f "$DADOS/lumero.py" "$DADOS/lumero.svg" "$DADOS/lumero_gui.py" "$DADOS/lumero_gui.html" "$DADOS/gui.json"
 ESQ="org.gnome.settings-daemon.plugins.media-keys"
 CAM="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/lumero/"
 if command -v gsettings >/dev/null && gsettings list-keys "$ESQ" >/dev/null 2>&1; then

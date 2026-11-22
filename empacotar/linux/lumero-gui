@@ -1,0 +1,7 @@
+#!/bin/sh
+# Lumero instalado por pacote: abre a janela de chat.
+# Sem o Ollama ainda, abre o terminal, que oferece instalar e configurar.
+if ! command -v ollama >/dev/null 2>&1 && [ ! -x /usr/local/bin/ollama ]; then
+    exec /usr/bin/lumero-janela
+fi
+exec python3 /usr/share/lumero/lumero_gui.py "$@"

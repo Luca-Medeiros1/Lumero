@@ -15,8 +15,10 @@ for plist in "$HOME"/Library/LaunchAgents/com.lumero.lembrete-*.plist; do
     rm -f "$plist"
 done
 pkill -f "$DADOS/lumero.py" 2>/dev/null
+pkill -f "$DADOS/lumero_gui.py" 2>/dev/null
 rm -rf "$HOME/Applications/Lumero.app" "$HOME/.local/bin/lumero" \
-       "$DADOS/venv" "$DADOS/voz/piper-venv" "$DADOS/lumero.py" "$DADOS/Lumero.command"
+       "$DADOS/venv" "$DADOS/voz/piper-venv" "$DADOS/lumero.py" "$DADOS/Lumero.command" \
+       "$HOME/.local/bin/lumero-gui" "$DADOS/lumero_gui.py" "$DADOS/lumero_gui.html" "$DADOS/gui.json"
 
 if pergunta "Remover também o Ollama e TODOS os modelos baixados? [s/N]"; then
     echo "==> Ollama e modelos"

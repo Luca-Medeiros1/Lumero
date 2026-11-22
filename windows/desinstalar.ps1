@@ -15,7 +15,11 @@ if (-not $Confirmado -and -not (Pergunta 'Remover o Lumero? [s/N]')) { Write-Hos
 Write-Host '==> Lumero, atalhos e lembretes'
 Get-ScheduledTask -TaskName 'Lumero-Lembrete-*' -ErrorAction SilentlyContinue |
     Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*lumero_gui.py*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Programs')) 'Lumero.lnk'),
+                   (Join-Path ([Environment]::GetFolderPath('Programs')) 'Lumero (terminal).lnk'),
                    (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Lumero.lnk'))) {
     Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue
 }
@@ -25,7 +29,7 @@ if ($pathUsuario) {
     [Environment]::SetEnvironmentVariable('Path', $novo, 'User')
 }
 Remove-Item -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Lumero' -Recurse -Force -ErrorAction SilentlyContinue
-foreach ($item in @('venv', 'bin', 'voz\piper-venv', 'lumero.py', 'lumero.ico', 'tmp')) {
+foreach ($item in @('venv', 'bin', 'voz\piper-venv', 'lumero.py', 'lumero_gui.py', 'lumero_gui.html', 'gui.json', 'lumero.ico', 'tmp')) {
     Remove-Item -LiteralPath (Join-Path $Dados $item) -Recurse -Force -ErrorAction SilentlyContinue
 }
 if (Get-NetFirewallRule -DisplayName 'Lumero - Ollama sem internet' -ErrorAction SilentlyContinue) {

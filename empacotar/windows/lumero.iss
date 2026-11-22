@@ -36,6 +36,8 @@ pt.FinishedLabel=O Lumero foi instalado. Procure "Lumero" no menu Iniciar ou ape
 
 [Files]
 Source: "..\..\lumero.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\lumero_gui.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\lumero_gui.html"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\assets\lumero.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\assets\lumero.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\..\windows\instalar.ps1"; DestDir: "{app}\windows"; Flags: ignoreversion
@@ -46,6 +48,9 @@ Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\instalar.ps1"" -SemRegistro"; \
   StatusMsg: "Configurando o Lumero (Python, Ollama e modelos de IA)..."; \
   Flags: waituntilterminated
+Filename: "{localappdata}\Lumero\venv\Scripts\pythonw.exe"; \
+  Parameters: """{localappdata}\Lumero\lumero_gui.py"""; \
+  Description: "Abrir o Lumero agora"; Flags: postinstall nowait skipifsilent skipifdoesntexist
 
 [UninstallRun]
 Filename: "powershell.exe"; \

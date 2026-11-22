@@ -80,7 +80,7 @@ function Gravar-Config($chave, $valor) {
     [IO.File]::WriteAllText($arquivo, $json, (New-Object Text.UTF8Encoding($false)))
 }
 
-foreach ($arq in @('lumero.py', 'assets\lumero.ico', 'windows\desinstalar.ps1')) {
+foreach ($arq in @('lumero.py', 'lumero_gui.py', 'lumero_gui.html', 'assets\lumero.ico', 'windows\desinstalar.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $Raiz $arq))) {
         Write-Host "Falta o arquivo $arq. Extraia o zip inteiro e rode de novo." -ForegroundColor Red
         Sair 1
@@ -156,6 +156,9 @@ if (Test-Path -LiteralPath $Destino) {
 }
 Copy-Item -LiteralPath (Join-Path $Raiz 'lumero.py') -Destination $Destino -Force
 Copy-Item -LiteralPath (Join-Path $Raiz 'assets\lumero.ico') -Destination (Join-Path $Dados 'lumero.ico') -Force
+foreach ($arq in @('lumero_gui.py', 'lumero_gui.html')) {
+    Copy-Item -LiteralPath (Join-Path $Raiz $arq) -Destination (Join-Path $Dados $arq) -Force
+}
 Copy-Item -LiteralPath (Join-Path $Raiz 'windows\desinstalar.ps1') -Destination (Join-Path $Dados 'desinstalar.ps1') -Force
 
 Write-Host '    Criando o ambiente Python do Lumero...'
@@ -165,6 +168,12 @@ $Py = Join-Path $Venv 'Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $Py)) { Aviso 'não consegui criar o ambiente Python; usando o Python do sistema.'; $Py = $Python }
 & $Py -m pip install --quiet --disable-pip-version-check prompt_toolkit psutil pillow pillow-heif pypdf
 if ($LASTEXITCODE -ne 0) { Aviso 'algumas bibliotecas não instalaram (sem internet?). O Lumero funciona com menos recursos.' }
+# janela própria do chat (usa o WebView2, o motor do Edge que já vem no Windows)
+& $Py -m pip install --quiet --disable-pip-version-check pywebview
+if ($LASTEXITCODE -ne 0) { Aviso 'a janela própria não instalou: o chat vai abrir no Edge.' }
+$PyJanela = Join-Path (Split-Path -Parent $Py) 'pythonw.exe'
+if (-not (Test-Path -LiteralPath $PyJanela)) { $PyJanela = $Py }
+$Gui = Join-Path $Dados 'lumero_gui.py'
 
 # comando "lumero" no terminal
 $cmd = @"
@@ -181,15 +190,20 @@ if (($pathUsuario -split ';') -notcontains $Bin) {
 }
 
 # atalhos no menu Iniciar (com Ctrl+Alt+A) e, se quiser, na área de trabalho
-function Criar-Atalho($caminho, $comTecla) {
+function Criar-Atalho($caminho, $comTecla, $terminal) {
     $shell = New-Object -ComObject WScript.Shell
     $lnk = $shell.CreateShortcut($caminho)
-    $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
-    if ($wt) {   # Windows Terminal: cores e símbolos melhores que o console antigo
-        $lnk.TargetPath = $wt.Source
-        $lnk.Arguments = "--title Lumero cmd /c `"$(Join-Path $Bin 'lumero.cmd')`""
+    if (-not $terminal) {   # janela de chat (pythonw: sem console preto atrás)
+        $lnk.TargetPath = $PyJanela
+        $lnk.Arguments = "`"$Gui`""
     } else {
-        $lnk.TargetPath = Join-Path $Bin 'lumero.cmd'
+        $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
+        if ($wt) {   # Windows Terminal: cores e símbolos melhores que o console antigo
+            $lnk.TargetPath = $wt.Source
+            $lnk.Arguments = "--title Lumero cmd /c `"$(Join-Path $Bin 'lumero.cmd')`""
+        } else {
+            $lnk.TargetPath = Join-Path $Bin 'lumero.cmd'
+        }
     }
     $lnk.WorkingDirectory = $env:USERPROFILE
     $lnk.IconLocation = "$(Join-Path $Dados 'lumero.ico'),0"
@@ -197,11 +211,15 @@ function Criar-Atalho($caminho, $comTecla) {
     if ($comTecla) { $lnk.Hotkey = 'CTRL+ALT+A' }
     $lnk.Save()
 }
-Criar-Atalho (Join-Path ([Environment]::GetFolderPath('Programs')) 'Lumero.lnk') $true
-Write-Host '    Atalho no menu Iniciar criado (Ctrl+Alt+A abre o Lumero).'
+$menu = [Environment]::GetFolderPath('Programs')
+Criar-Atalho (Join-Path $menu 'Lumero.lnk') $true $false
+Criar-Atalho (Join-Path $menu 'Lumero (terminal).lnk') $false $true
+Write-Host '    Atalhos no menu Iniciar: "Lumero" (janela de chat, Ctrl+Alt+A) e "Lumero (terminal)".'
 if (Pergunta 'Criar também um atalho na área de trabalho? [s/N]' 'n') {
-    Criar-Atalho (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Lumero.lnk') $false
+    Criar-Atalho (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Lumero.lnk') $false $false
 }
+$cmdGui = "@echo off`r`nstart `"`" `"$PyJanela`" `"$Gui`" %*`r`n"
+[IO.File]::WriteAllText((Join-Path $Bin 'lumero-gui.cmd'), $cmdGui, (New-Object Text.UTF8Encoding($false)))
 
 if (-not $SemRegistro) {   # aparece em Configurações → Aplicativos instalados
     $chave = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Lumero'
@@ -330,7 +348,8 @@ if ($querVoz) {
 
 Write-Host ''
 Write-Host '✓ Lumero instalado!' -ForegroundColor Green
-Write-Host '  • Procure "Lumero" no menu Iniciar ou aperte Ctrl+Alt+A.'
+Write-Host '  • Procure "Lumero" no menu Iniciar ou aperte Ctrl+Alt+A: abre a janela de chat.'
+Write-Host '  • Prefere o terminal? Use o atalho "Lumero (terminal)".'
 Write-Host '  • No terminal (abra um novo), digite: lumero'
 Write-Host "  • Configurações: $Dados\config.json"
 Write-Host '  • Desinstalar: Configurações → Aplicativos → Lumero'

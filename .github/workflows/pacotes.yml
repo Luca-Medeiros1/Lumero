@@ -45,6 +45,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ./pacotes/*.deb
           lumero --versao
+          python3 -m py_compile /usr/share/lumero/lumero_gui.py
+          test -f /usr/share/lumero/lumero_gui.html
       - uses: actions/upload-artifact@v4
         with:
           name: lumero-linux

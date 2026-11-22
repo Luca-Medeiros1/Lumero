@@ -49,13 +49,17 @@ esperar_ollama() {
 
 [ "$(uname)" = Darwin ] || { echo "Este instalador é para o macOS. No Linux use: bash linux/instalar.sh"; exit 1; }
 [ "$(id -u)" -eq 0 ] && { echo "Rode como o seu usuário normal (sem sudo)."; exit 1; }
-for arq in lumero.py assets/lumero.icns; do
+for arq in lumero.py lumero_gui.py lumero_gui.html assets/lumero.icns; do
     [ -f "$RAIZ/$arq" ] || { echo "Falta o arquivo $arq. Extraia o zip inteiro e rode de novo."; exit 1; }
 done
 
 # ----------------------------------------------------------------------------- 1
 passo "1/6 Conferindo o Mac"
 echo "    macOS $(sw_vers -productVersion) · $(uname -m)"
+if [ "$(sw_vers -productVersion | cut -d. -f1)" -lt 14 ]; then
+    echo "    O Ollama precisa do macOS 14 (Sonoma) ou mais novo. Atualize o macOS e rode de novo."
+    exit 1
+fi
 ram=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
 echo "    RAM: ${ram} GB"
 if [ "$(uname -m)" = arm64 ]; then
@@ -100,6 +104,8 @@ if [ -f "$DADOS/lumero.py" ]; then
     cp "$DADOS/lumero.py" "$DADOS/backups/lumero-antes-da-instalacao-$(date +%Y%m%d-%H%M%S).py"
 fi
 cp "$RAIZ/lumero.py" "$DADOS/lumero.py"
+cp "$RAIZ/lumero_gui.py" "$RAIZ/lumero_gui.html" "$DADOS/"
+cp "$RAIZ/assets/lumero.svg" "$DADOS/lumero.svg" 2>/dev/null || true
 
 echo "    Criando o ambiente Python do Lumero..."
 rm -rf "$DADOS/venv"
@@ -107,6 +113,17 @@ rm -rf "$DADOS/venv"
 PY="$DADOS/venv/bin/python"
 "$PY" -m pip install --quiet --disable-pip-version-check prompt_toolkit psutil pillow pillow-heif pypdf \
     || aviso "não consegui instalar algumas bibliotecas (sem internet?)."
+# janela própria do chat (usa o WebKit do macOS); sem ela, abre no navegador
+"$PY" -m pip install --quiet --disable-pip-version-check pywebview \
+    || aviso "a janela própria não instalou: o chat vai abrir no navegador."
+
+cat > "$BIN/lumero-gui" <<EOF
+#!/bin/bash
+# Abre o Lumero na janela de chat
+export PATH="$(brew --prefix)/bin:/usr/local/bin:\$PATH"
+exec "$PY" "$DADOS/lumero_gui.py" "\$@"
+EOF
+chmod +x "$BIN/lumero-gui"
 
 cat > "$BIN/lumero" <<EOF
 #!/bin/bash
@@ -147,13 +164,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleExecutable</key><string>Lumero</string>
     <key>CFBundleIconFile</key><string>lumero</string>
-    <key>LSMinimumSystemVersion</key><string>12.0</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict>
 </plist>
 EOF
 cat > "$APP/Contents/MacOS/Lumero" <<EOF
 #!/bin/bash
-open "$DADOS/Lumero.command"
+exec "$BIN/lumero-gui"
 EOF
 chmod +x "$APP/Contents/MacOS/Lumero"
 touch "$APP"
@@ -242,6 +259,6 @@ echo "    • Desligar/reiniciar: o macOS pergunta se o Terminal pode controlar 
 
 echo
 printf '\033[1;32m✓ Lumero instalado!\033[0m\n'
-echo "  • Abra pelo Spotlight (Cmd+Espaço, digite Lumero) ou pelo Launchpad,"
-echo "    ou digite  lumero  num Terminal novo."
+echo "  • Abra pelo Spotlight (Cmd+Espaço, digite Lumero) ou pelo Launchpad: abre a janela de chat."
+echo "  • Prefere o terminal? Digite  lumero  num Terminal novo."
 echo "  • Configurações: $DADOS/config.json · Desinstalar: bash mac/desinstalar.sh"

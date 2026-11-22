@@ -3,9 +3,15 @@ Type=Application
 Name=Lumero
 GenericName=Assistente de IA local
 Comment=IA local que pesquisa, acha arquivos e executa tarefas no computador
-Exec=/usr/bin/lumero-janela
+Exec=/usr/bin/lumero-gui
 Icon=lumero
 Terminal=false
 Categories=Utility;
 Keywords=lumero;ia;ai;ollama;assistente;chat;
 StartupNotify=true
+StartupWMClass=lumero
+Actions=terminal;
+
+[Desktop Action terminal]
+Name=Abrir no terminal
+Exec=/usr/bin/lumero-janela

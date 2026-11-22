@@ -5,7 +5,7 @@ Funciona no Linux (Fedora, Ubuntu/Debian/Mint, Arch/Manjaro, openSUSE), no Windo
 e no macOS. O modelo roda no próprio computador (Ollama em 127.0.0.1); só as
 ferramentas de pesquisa acessam a internet, e você pode desligá-las em PESQUISA_INTERNET.
 
-Uso:   lumero   (ou: python3 lumero.py)
+Uso:   lumero   (ou: python3 lumero.py)        janela de chat: lumero-gui (lumero_gui.py)
 Sair:  digite "sair"
 
 O que a IA consegue fazer:
@@ -50,8 +50,8 @@ if os.path.isdir(_VENDOR):
 # ============================================================================
 # Configurações
 # ============================================================================
-GERACAO = 20               # sobe 1 a cada alteração no script (automático na autoedição)
-VERSAO = "1.0.0"          # versão dos instaladores (Linux, Windows e Mac)
+GERACAO = 21               # sobe 1 a cada alteração no script (automático na autoedição)
+VERSAO = "1.1.0"          # versão dos instaladores (Linux, Windows e Mac)
 MODELO = "qwen3.5:4b"      # leve, usa ferramentas, pensa e enxerga imagens
 OLLAMA = "http://127.0.0.1:11434/api/chat"
 CONTEXTO = 8192            # memória da conversa em tokens (maior = mais lento no processador)
